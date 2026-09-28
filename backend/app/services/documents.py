@@ -183,7 +183,7 @@ def _document_envelope(document: Document, job: ExtractionJob | None = None) -> 
 
 
 async def list_documents(
-    session: AsyncSession, access: RegistrationAccess, fp: str, *, page: int = 1, size: int = 20
+    session: AsyncSession, access: RegistrationAccess, fp: str, *, page: int = 0, size: int = 20
 ) -> tuple[list[dict[str, Any]], int]:
     stmt = (
         select(Document, ExtractionJob)
@@ -196,7 +196,7 @@ async def list_documents(
     total = (await session.execute(count_stmt)).scalar_one()
     rows = (
         await session.execute(
-            stmt.order_by(Document.uploaded_at.desc()).offset((page - 1) * size).limit(size)
+            stmt.order_by(Document.uploaded_at.desc()).offset(page * size).limit(size)
         )
     ).all()
     return [_document_envelope(doc, job) for doc, job in rows], total

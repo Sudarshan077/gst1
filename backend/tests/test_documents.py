@@ -743,16 +743,28 @@ async def test_pagination_fields_present(
         assert response.status_code == 200
 
     response = await client.get(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents?page=1&size=1",
+        f"/api/v1/registrations/{reg_id}/months/{fp}/documents?page=0&size=1",
         headers=headers,
     )
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert payload["page"] == 1
+    assert payload["page"] == 0
     assert payload["size"] == 1
     assert payload["totalElements"] == 2
     assert payload["last"] is False
     assert len(payload["content"]) == 1
+
+    page2 = await client.get(
+        f"/api/v1/registrations/{reg_id}/months/{fp}/documents?page=1&size=1",
+        headers=headers,
+    )
+    assert page2.status_code == 200
+    payload2 = page2.json()["data"]
+    assert payload2["page"] == 1
+    assert payload2["last"] is True
+    assert len(payload2["content"]) == 1
+    # page 0 and page 1 should return different document ids.
+    assert payload["content"][0]["id"] != payload2["content"][0]["id"]
 
 
 async def test_orphan_object_compensating_delete(

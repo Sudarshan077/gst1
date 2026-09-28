@@ -63,7 +63,7 @@ async def list_docs(
     fp: str,
     access: Annotated[RegistrationAccess, Depends(require_registration_access("registration_id"))],
     session: SessionDep,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=0)] = 0,
     size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> dict[str, Any]:
     rows, total = await list_documents(session, access, fp, page=page, size=size)
@@ -74,7 +74,7 @@ async def list_docs(
             "page": page,
             "size": size,
             "totalElements": total,
-            "last": page * size >= total,
+            "last": (page + 1) * size >= total,
         },
     }
 
