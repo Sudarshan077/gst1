@@ -26,3 +26,6 @@ tools/pg/data/
 tools/redis/
 tools/minio/
 *.log
+
+# Native Windows tool binaries
+tools/*.exe

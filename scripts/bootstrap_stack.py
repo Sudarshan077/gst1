@@ -6,12 +6,11 @@ Starts the data plane exactly as AI_BUILD_PLAYBOOK.md §3 + TECHNICAL_ARCHITECTU
 
     PostgreSQL :5436  — native pg_ctl from a local PG 16 install (Farmer App's tools/pg)
     Redis      :6380  — native redis-server (Farmer App's tools/redis)
-    MinIO      :9001  — S3 API via tools/docker-compose.yml (Docker; native minio.exe is
-                        no longer distributed by MinIO — dl.min.io returns 410 Gone, and
-                        minio/minio + minio/mc were removed from Docker Hub 2026-09;
-                        this repo pins pgsty/silo, the drop-in MinIO-compatible fork
-                        whose image bundles the `mc` client — bucket ops run via
-                        `docker exec` into the server container, no host networking)
+    MinIO      :9001  — native tools/minio.exe is the primary path (downloaded at
+                        setup time); if it is absent, fallback is tools/docker-compose.yml
+                        (Docker compose with pgsty/silo, the drop-in MinIO-compatible
+                        fork that bundles the `mc` client — bucket ops run via `docker
+                        exec`, no host networking)
 
 Also: creates gst_filing_db, seeds schemas core/gst/extraction (TECH doc §3), creates the
 versioned `gst-docs` bucket, then health-checks every port. Idempotent: re-running on a
@@ -220,48 +219,126 @@ def start_redis() -> None:
             "--appendonly",
             "no",
         ],
-        creationflags=subprocess.CREATE_NO_WINDOW,  # type: ignore[attr-defined]
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
     wait_for_port(REDIS_PORT, 30, "redis")
 
 
 # ---------------------------------------------------------------- minio
 
+NATIVE_MINIO_BIN = REPO_ROOT / "tools/minio.exe"
+MINIO_DATA = REPO_ROOT / "tools/minio/data"
+MINIO_CONSOLE_PORT = 9002
+
+
+def _start_minio_native() -> None:
+    """Native minio.exe on port 9001; console on 9002."""
+    MINIO_DATA.mkdir(parents=True, exist_ok=True)
+    env = {
+        **os.environ,
+        "MINIO_ROOT_USER": MINIO_ROOT_USER,
+        "MINIO_ROOT_PASSWORD": MINIO_ROOT_PASSWORD,
+    }
+    log_file = REPO_ROOT / "tools/minio/minio.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[minio] starting native binary on :{MINIO_PORT} (console :{MINIO_CONSOLE_PORT})")
+    with open(log_file, "a", encoding="utf-8") as log_fh:
+        subprocess.Popen(
+            [
+                str(NATIVE_MINIO_BIN),
+                "server",
+                str(MINIO_DATA),
+                "--address",
+                f"127.0.0.1:{MINIO_PORT}",
+                "--console-address",
+                f"127.0.0.1:{MINIO_CONSOLE_PORT}",
+            ],
+            env=env,
+            stdout=log_fh,
+            stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    wait_for_port(MINIO_PORT, 60, "minio")
+
 
 def start_minio() -> None:
     if port_open(MINIO_PORT):
         print(f"[minio] port {MINIO_PORT} already open — assuming minio is up")
         return
-    print("[minio] docker compose up -d (tools/docker-compose.yml)")
-    subprocess.run(
-        ["docker", "compose", "-f", str(REPO_ROOT / "tools/docker-compose.yml"), "up", "-d"],
-        check=True,
-        cwd=REPO_ROOT,
-    )
-    wait_for_port(MINIO_PORT, 60, "minio")
+    if NATIVE_MINIO_BIN.exists():
+        _start_minio_native()
+    else:
+        print("[minio] docker compose up -d (tools/docker-compose.yml)")
+        subprocess.run(
+            ["docker", "compose", "-f", str(REPO_ROOT / "tools/docker-compose.yml"), "up", "-d"],
+            check=True,
+            cwd=REPO_ROOT,
+        )
+        wait_for_port(MINIO_PORT, 60, "minio")
 
 
 def minio_alive() -> bool:
     """MinIO liveness endpoint answers 200 once ready (GET / returns 403 for anon)."""
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{MINIO_PORT}/minio/health/live", timeout=3) as r:
-            return r.status == 200
+            return bool(r.status == 200)
     except (OSError, urllib.error.HTTPError):
         return False
 
 
 def seed_bucket() -> None:
-    """Create + version the gst-docs bucket via `mc` inside the server container.
+    """Create + version the gst-docs bucket using MinIO's S3 API.
 
-    The pgsty/silo image bundles `mc`; running it in-container means it talks to the
-    server over the container's own loopback — no host networking (broken on Docker
-    Desktop) and no throwaway sidecar container needed.
+    When the native Windows binary is available, bucket ops use boto3/minio admin
+    via Python (bundled in pyproject). Falls back to in-container `mc` when
+    Docker is used.
     """
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline and not minio_alive():
         time.sleep(1)
     if not minio_alive():
         raise RuntimeError("MinIO is listening but never became ready")
+
+    if NATIVE_MINIO_BIN.exists():
+        _seed_bucket_with_mc()
+    else:
+        _seed_bucket_with_mc_container()
+
+
+def _seed_bucket_with_mc() -> None:
+    """Use native `mc` to create/enable-version on the local MinIO server."""
+    home_dir = REPO_ROOT / "tools/minio/mc_home"
+    home_dir.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "HOME": str(home_dir)}
+    alias_cmd = [
+        str(REPO_ROOT / "tools/mc.exe"),
+        "alias",
+        "set",
+        "local",
+        f"http://127.0.0.1:{MINIO_PORT}",
+        MINIO_ROOT_USER,
+        MINIO_ROOT_PASSWORD,
+    ]
+    proc = subprocess.run(alias_cmd, capture_output=True, text=True, env=env, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"mc alias failed: {proc.stderr.strip() or proc.stdout.strip()}")
+    for args in (
+        ["mb", "--ignore-existing", f"local/{MINIO_BUCKET}"],
+        ["version", "enable", f"local/{MINIO_BUCKET}"],
+    ):
+        proc = subprocess.run(
+            [str(REPO_ROOT / "tools/mc.exe"), *args],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"mc {' '.join(args)} failed: {proc.stderr.strip() or proc.stdout.strip()}")
+    print(f"[minio] bucket {MINIO_BUCKET} ready (versioned)")
+
+
+def _seed_bucket_with_mc_container() -> None:
     # mc writes config to ~/.mc — point HOME at a writable dir inside the container.
     script = (
         "export HOME=/tmp && "

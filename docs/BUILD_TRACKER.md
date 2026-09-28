@@ -35,7 +35,7 @@
 | 0.6 | Businesses/registrations CRUD + GSTIN validation | ✅ Done | `API_SPECIFICATION.md`, `TECHNICAL_ARCHITECTURE.md` |
 | 0.7A | Auth API surface: session bootstrap + step-up wiring for web | ✅ Done | `SECURITY_AND_ACCESS.md`, `API_SPECIFICATION.md` |
 | 0.7B | Auth screens + shells (Next.js) | ✅ Done | `FRONTEND_SPECIFICATION.md` |
-| 0.8 | Phase-0 E2E + docs verification | 🔄 In progress | `TESTING_STRATEGY.md` |
+| 0.8 | Phase-0 E2E + docs verification | ✅ Done | `TESTING_STRATEGY.md` | Evidence: `python scripts/e2e_phase0.py` green — 6 gates pass; backend 80/80 pytest, ruff/mypy clean, frontend lint/tsc clean, Playwright 7/7, docs §1–§6 verified, migration up/down/up clean. |
 
 ### Phase 1 — Capture & correlation
 
