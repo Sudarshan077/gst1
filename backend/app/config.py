@@ -28,8 +28,17 @@ class Settings(BaseSettings):
     otp_max_verify_attempts: int = 5
     otp_request_limit_per_hour: int = 5
 
+    # MinIO object storage — bootstrap_stack.py :9001.
+    minio_endpoint: str = "127.0.0.1:9001"
+    minio_use_tls: bool = False
+    minio_access_key: str = "gst_admin"  # noqa: S105
+    minio_secret_key: str = "gst_minio_dev_pass"  # noqa: S105
+
     # Redis (queue + OTP store + refresh families) — bootstrap_stack.py :6380.
     redis_url: str = "redis://127.0.0.1:6380/0"  # noqa: S105
+
+    # Upload guard per SECURITY_AND_ACCESS.md §6.
+    max_document_pages: int = 50
 
 
 @lru_cache

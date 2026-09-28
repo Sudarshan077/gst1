@@ -19,6 +19,7 @@ from app.api.errors import (
 from app.api.routers.auth import router as auth_router
 from app.api.routers.business import RegRouter
 from app.api.routers.business import router as business_router
+from app.api.routers.documents import router as documents_router
 from app.api.routers.firm import router as firm_router
 from app.core.auth.errors import AuthError
 
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(business_router, prefix="/api/v1")
     app.include_router(RegRouter, prefix="/api/v1")
+    app.include_router(documents_router, prefix="/api/v1")
     app.include_router(firm_router, prefix="/api/v1")
 
     # Cast-free handler registration: the handlers match Starlette's expected

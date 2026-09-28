@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import random
+import string
 import sys
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -83,6 +85,12 @@ async def make_user(
         await session.commit()
         await session.refresh(user)
         return user
+
+
+def make_mobile() -> str:
+    """Return a valid 10-digit mobile string for OTP tests."""
+    # Test-only random digits; not used for cryptographic material.
+    return "9" + "".join(random.choices(string.digits, k=9))  # noqa: S311
 
 
 def uuid4hex() -> str:
