@@ -37,6 +37,18 @@ class Settings(BaseSettings):
     # Redis (queue + OTP store + refresh families) — bootstrap_stack.py :6380.
     redis_url: str = "redis://127.0.0.1:6380/0"  # noqa: S105
 
+    # LLM extraction service (EXTRACTION_SPEC.md §9).
+    extraction_llm_base_url: str = "http://127.0.0.1:3001/v1"
+    extraction_llm_model: str = "llama3.1:8b"
+    extraction_llm_timeout_seconds: int = 120
+    extraction_llm_max_tokens_per_doc: int = 8192
+    extraction_llm_max_docs_per_day: int = 5000
+
+    # OCR / preprocess knobs (EXTRACTION_SPEC.md §2/§9).
+    extraction_blur_threshold_photo: float = 80.0
+    extraction_blur_threshold_whatsapp: float = 60.0
+    extraction_ocr_dpi: int = 300
+
     # Upload guard per SECURITY_AND_ACCESS.md §6.
     max_document_pages: int = 50
 

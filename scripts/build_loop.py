@@ -53,38 +53,33 @@ ROLES_PATH = os.path.join(BUILD_DIR, "role_models.json")
 # die mid-build with a 401/402 from their upstream, so the head of each chain is
 # the route that has actually completed a full build/test turn in this repo.
 #
-# The user's omniroute "best coding"/"best reasoning" routes are kept in the
-# chains — they are currently BROKEN STUBS (they answer with a local qwen2.5
-# fallback and fail the ping), so they are listed after the working routes and
-# will be picked up automatically once the omniroute side is repaired:
-#   auto/best-coding    → currently serves qwen2.5:7b-ctx64k (wrong arithmetic)
-#   auto/best-reasoning → currently serves qwen2.5:7b-ctx64k (wrong arithmetic)
+# 1 Oct 2026: the stub problem is FIXED — auto/best-coding and auto/best-reasoning
+# now answer with real frontier upstreams (claude-opus-5.x / gpt-6.1-sol-pro pool)
+# and pass the arithmetic check (12345.67 @18% → 2222.22). Per Tony's standing
+# role assignment they are the PRIMARY routes: builder=best-coding,
+# tester=best-reasoning. Keep the ollama-cloud and free routes as failover.
 ROLE_CHAINS = {
     "builder": [
-        ("openrouter/cohere/north-mini-code:free", "omniroute"),  # $0 code-specialised; tools proven
-        ("auto/best-coding", "omniroute"),                        # omniroute's own "best coding" route
-        ("kimi-k2.7-code", "ollama-cloud"),
-        ("glm-5.3-flash", "ollama-cloud"),
-        ("gpt-oss:120b", "ollama-cloud"),
+        ("auto/best-coding", "omniroute"),
+        ("openrouter/cohere/north-mini-code:free", "omniroute"),
+        ("auto/free", "omniroute"),
     ],
     "tester": [
+        ("auto/best-reasoning", "omniroute"),
         ("openrouter/nvidia/nemotron-3-super-120b-a12b:free", "omniroute"),
-        ("auto/best-reasoning", "omniroute"),                     # omniroute's own "best reasoning" route
-        ("deepseek-v4.1-flash", "ollama-cloud"),
-        ("deepseek-v4-pro:0813", "ollama-cloud"),
-        ("gpt-oss:120b", "ollama-cloud"),
+        ("auto/free", "omniroute"),
     ],
     "monitor": [
         ("glm-5.3", "ollama-cloud"),
+        ("auto/best-reasoning", "omniroute"),
         ("kimi-k3", "ollama-cloud"),
-        ("deepseek-v4.1-flash", "ollama-cloud"),
     ],
 }
 
 # Builder-feedback / rework model chain (used to turn tester findings into a fix).
 FEEDBACK_CHAIN = [
-    ("deepseek-v4.1-flash", "ollama-cloud"),
-    ("glm-5.3-flash", "ollama-cloud"),
+    ("auto/best-coding", "omniroute"),
+    ("openrouter/cohere/north-mini-code:free", "omniroute"),
 ]
 
 # Routes that currently answer with a LOCAL STUB rather than the real upstream:
@@ -95,8 +90,6 @@ FEEDBACK_CHAIN = [
 # omniroute repairs them) but runtime failover skips them. Delete a name here to
 # re-enable it.
 STUB_ROUTES = {
-    "auto/best-coding",
-    "auto/best-reasoning",
     "auto/coding",
     "auto/chat",
     "auto/reasoning",
@@ -319,14 +312,26 @@ def probe_agent(model, provider):
 
 
 def resolve_roles(probe: bool = True) -> dict:
-    """Pick the first live model per role. Cached in build/role_models.json."""
-    resolved = {}
+    """Pick the first live model per role. Cached in build/role_models.json.
+
+    With probe=False we reuse the cached live roles if they exist. Falling
+    straight to each chain HEAD is wrong: the head is the *preferred* model, not
+    a known-live one, so a --no-probe restart can hand the loop a model that was
+    already probed DEAD (observed: omniroute free tiers, every role).
+    """
     if not probe:
-        for role, chain in ROLE_CHAINS.items():
-            resolved[role] = {"model": chain[0][0], "provider": chain[0][1]}
+        cached = load_json(ROLES_PATH, {})
+        if all(r in cached and cached[r].get("model") for r in ROLE_CHAINS) \
+                and cached.get("feedback", {}).get("model"):
+            log("  using cached live roles from build/role_models.json")
+            return cached
+        log("  ⚠ no usable role cache — falling back to chain heads")
+        resolved = {role: {"model": chain[0][0], "provider": chain[0][1]}
+                    for role, chain in ROLE_CHAINS.items()}
         resolved["feedback"] = {"model": FEEDBACK_CHAIN[0][0], "provider": FEEDBACK_CHAIN[0][1]}
         return resolved
 
+    resolved: dict = {}
     for role, chain in ROLE_CHAINS.items():
         chosen = None
         for model, provider in chain:
@@ -478,9 +483,15 @@ REASON: <one line why>
 RULES:
 - ADVANCE only if the tester said PASS AND the evidence is REAL AND you found no blocking defect.
 - RETRY if the tester said FAIL, OR the evidence is WEAK (force a real re-verification), OR a fix is clearly actionable. Always supply a BUILDER_INSTRUCTION on RETRY (max {MAX_RETRIES} retries already tracked).
-- ESCALATE if: a task failed after retries, docs are ambiguous and you cannot resolve, or all phases are complete.
+- ESCALATE if: a task failed after retries, docs are ambiguous and you cannot resolve, or all phases are complete. Every ESCALATE MUST carry a REASON — escalation halts the build and waits for a human, so an unexplained one is treated as a formatting error and re-asked.
 - When a phase's tasks are all done, set NEXT to the first task of the next phase. If no next phase, ACTION: ESCALATE with NEXT:none and REASON "all phases complete".
 - If you ADVANCE, also decompose any stub task whose title contains "expand at runtime" into concrete tasks and write them into build/plan.json BEFORE proceeding (real tasks with id/title/docs/done_when).
+
+OUTPUT LANGUAGE: English ONLY. The field labels TESTER_EVIDENCE / DEFECT /
+BUILDER_INSTRUCTION / ACTION / NEXT / REASON must be written exactly as given, in
+ASCII English, each on its own line. The loop parses these mechanically — a
+translated label (e.g. 操作/原因/证据) is invisible to it and stops the build.
+You may quote foreign-language text inside a field's VALUE, never as a label.
 """
 
 
@@ -528,14 +539,76 @@ def first_pending_task():
     return None, None
 
 
+FIELD_ALIASES = {
+    "ACTION": ("ACTION", "操作", "动作", "行动", "决定"),
+    "NEXT": ("NEXT", "下一步", "下一任务", "下一个"),
+    "REASON": ("REASON", "原因", "理由"),
+    "DEFECT": ("DEFECT", "缺陷", "问题", "剩余缺陷"),
+    "TESTER_EVIDENCE": ("TESTER_EVIDENCE", "测试人员证据", "证据", "测试证据"),
+    "BUILDER_INSTRUCTION": ("BUILDER_INSTRUCTION", "BUILDER 指令", "构建器指令",
+                            "构建指令", "BUIDER 指令"),
+}
+
+# Verdict keywords as they may appear inside ACTION values (any language).
+ACTION_TOKENS = ("ADVANCE", "RETRY", "ESCALATE", "进行", "继续", "推进",
+                 "重试", "升级", "上报", "停止")
+
+
+def _clean_line(line: str) -> str:
+    """Strip markdown decoration and normalise punctuation on one report line.
+
+    Agents decorate their own output (`**ACTION:** ADVANCE`, `> ACTION: RETRY`,
+    `- ACTION: ...`) and some reply with full-width CJK punctuation. None of that
+    is a signal about the work — it must not break field extraction.
+    """
+    s = line.strip()
+    s = s.lstrip("-*>#0123456789. \t")     # list bullets / headings / bold / quotes
+    s = s.replace("*", "").replace("`", "").replace("_", " ")
+    s = s.replace("：", ":").replace("　", " ").replace("\u200b", "")
+    return s.strip()
+
+
 def parse_field(text, field):
-    """Pull `FIELD: value` out of an agent report (first match)."""
-    prefix = field + ":"
-    for line in text.splitlines():
-        s = line.strip()
-        if s.upper().startswith(prefix.upper()):
-            return s.split(":", 1)[1].strip()
+    """Pull `FIELD: value` out of an agent report (first match).
+
+    Tolerant by design: agents answer in their own language and decorate lines
+    with markdown. A strict English-only match here silently returns "" and the
+    caller falls back to a default (ESCALATE), which halts the whole loop on a
+    perfectly good cycle — so label aliases and decoration are both handled.
+    """
+    names = FIELD_ALIASES.get(field.upper(), (field,))
+    for line in (text or "").splitlines():
+        s = _clean_line(line)
+        up = s.upper()
+        for name in names:
+            prefix = name.upper() + ":"
+            if up.startswith(prefix):
+                val = s.split(":", 1)[1].strip()
+                return val.strip("*`_ ")
     return ""
+
+
+def parse_action(text):
+    """Resolve the Monitor's ACTION, tolerating language and formatting drift.
+
+    Falls back to scanning the whole report for a verdict token, because a
+    missed ACTION is not a neutral event: it defaults to ESCALATE and stops the
+    build. An unknown action still returns "" so the caller can decide.
+    """
+    val = parse_field(text, "ACTION").upper()
+    for token in ("ADVANCE", "RETRY", "ESCALATE"):
+        if token in val:
+            return token
+    for zh, en in (("进行", "ADVANCE"), ("继续", "ADVANCE"), ("推进", "ADVANCE"),
+                   ("重试", "RETRY"), ("升级", "ESCALATE"), ("上报", "ESCALATE"),
+                   ("停止", "ESCALATE")):
+        if zh in val:
+            return en
+    # No labelled ACTION — scan for a bare verdict token, but only when the
+    # report names exactly ONE of them. Prose that mentions several ("I would
+    # not ADVANCE, RETRY instead") is ambiguous and must not be guessed at.
+    found = {t for t in ("ADVANCE", "RETRY", "ESCALATE") if t in (text or "").upper()}
+    return found.pop() if len(found) == 1 else ""
 
 
 def has_real_evidence(tester_out: str) -> bool:
@@ -636,11 +709,46 @@ def main():
         state["last_monitor_decision"] = m_out
         slot["history"].append({"role": "monitor", "out": m_out[-4000:],
                                 "ts": datetime.now().isoformat()})
-        action = (parse_field(m_out, "ACTION") or "ESCALATE").upper()
-        m_instruction = parse_field(m_out, "BUILDER_INSTRUCTION")
-        m_evidence = (parse_field(m_out, "TESTER_EVIDENCE") or "").upper()
+        action = parse_action(m_out)
+        # An unreadable ACTION *or* an unjustified ESCALATE both trigger the
+        # re-ask: escalation halts the build and waits on a human, so it must
+        # arrive with a reason. A missing reason means the report did not follow
+        # the format (wrong language, decoration), not that the build is broken.
+        if not action or (action == "ESCALATE" and not parse_field(m_out, "REASON")):
+            # A parse miss must not halt the build: ESCALATE is the *default*
+            # here, so an unreadable report would stop a good cycle (this is
+            # exactly how a Chinese-language Monitor reply killed a cycle whose
+            # Tester had PASSED with real evidence). Re-ask once, plainly.
+            log("  ⚠ monitor ACTION unreadable — re-asking for a plain-English verdict")
+            m_out2, _ = run_role(
+                "monitor", role_chain,
+                monitor_prompt(task, phase, t_out, b_out, state,
+                               "ok" if real_ev else "weak")
+                + "\n\nREPLY FORMAT OVERRIDE (overrides everything above): reply ONLY with the "
+                  "six English field lines, one per line, no markdown, no other language:\n"
+                  "TESTER_EVIDENCE: REAL | WEAK\nDEFECT: ...\nBUILDER_INSTRUCTION: ...\n"
+                  "ACTION: ADVANCE | RETRY | ESCALATE\nNEXT: ...\nREASON: ...\n",
+                start=roles["monitor"]["model"], timeout=900)
+            slot["history"].append({"role": "monitor-reask", "out": m_out2[-4000:],
+                                    "ts": datetime.now().isoformat()})
+            action = parse_action(m_out2)
+            m_instruction = parse_field(m_out2, "BUILDER_INSTRUCTION")
+            m_evidence = (parse_field(m_out2, "TESTER_EVIDENCE") or "").upper()
+            slot["monitor_defect"] = parse_field(m_out2, "DEFECT")
+            if action:
+                m_out = m_out2
+                state["last_monitor_decision"] = m_out
+            else:
+                # Still unreadable — fall back to the deterministic gate rather
+                # than halting: the loop's own tester-verdict + evidence checks
+                # are mechanical and trustworthy.
+                action = "RETRY" if ((not passed) or (not real_ev)) else "ADVANCE"
+                log(f"  ⚠ monitor still unreadable — deterministic gate decides: {action}")
+        else:
+            m_instruction = parse_field(m_out, "BUILDER_INSTRUCTION")
+            m_evidence = (parse_field(m_out, "TESTER_EVIDENCE") or "").upper()
+            slot["monitor_defect"] = parse_field(m_out, "DEFECT")
         slot["monitor_evidence_call"] = m_evidence
-        slot["monitor_defect"] = parse_field(m_out, "DEFECT")
         log(f"  monitor: ACTION={action} evidence={m_evidence or '?'} "
             f"defect={slot['monitor_defect'][:80]!r}")
 

@@ -8,6 +8,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.schemas import DraftFieldUpdateIn, RejectIn
 from app.core.access import (
     RegistrationAccess,
     require_registration_access,
@@ -21,6 +22,13 @@ from app.services.documents import (
     list_documents,
     store_documents,
 )
+from app.services.review import (
+    confirm_draft,
+    get_draft,
+    get_review_queue,
+    reject_document,
+    update_draft,
+)
 from app.services.storage import presigned_view_url
 
 router = APIRouter(tags=["documents"])
@@ -29,6 +37,67 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 UserDep = Annotated[uuid.UUID, Depends(require_user)]
 
 _ALLOWED_DOC_TYPES = {"UNCLASSIFIED", "INV", "CDN", "DBN", "OTHER"}
+
+
+@router.get("/registrations/{registration_id}/months/{fp}/review-queue")
+async def review_queue(
+    registration_id: str,
+    fp: str,
+    access: Annotated[RegistrationAccess, Depends(require_registration_access("registration_id"))],
+    session: SessionDep,
+) -> dict[str, Any]:
+    rows = await get_review_queue(session, access, fp)
+    return {"success": True, "data": rows}
+
+
+@router.get("/documents/{doc_id}/draft")
+async def get_doc_draft(
+    doc_id: uuid.UUID,
+    user_id: UserDep,
+    session: SessionDep,
+) -> dict[str, Any]:
+    doc = await get_document(session, doc_id)
+    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    data = await get_draft(session, doc_id, access)
+    return {"success": True, "data": data}
+
+
+@router.put("/documents/{doc_id}/draft")
+async def put_doc_draft(
+    doc_id: uuid.UUID,
+    body: DraftFieldUpdateIn,
+    user_id: UserDep,
+    session: SessionDep,
+) -> dict[str, Any]:
+    doc = await get_document(session, doc_id)
+    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    data = await update_draft(session, doc_id, access, user_id, body.model_dump(exclude_unset=True))
+    return {"success": True, "data": data}
+
+
+@router.post("/documents/{doc_id}/confirm")
+async def confirm_doc(
+    doc_id: uuid.UUID,
+    user_id: UserDep,
+    session: SessionDep,
+) -> dict[str, Any]:
+    doc = await get_document(session, doc_id)
+    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    data = await confirm_draft(session, doc_id, access, user_id)
+    return {"success": True, "data": data}
+
+
+@router.post("/documents/{doc_id}/reject")
+async def reject_doc(
+    doc_id: uuid.UUID,
+    body: RejectIn,
+    user_id: UserDep,
+    session: SessionDep,
+) -> dict[str, Any]:
+    doc = await get_document(session, doc_id)
+    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    data = await reject_document(session, doc_id, access, user_id, body.reason)
+    return {"success": True, "data": data}
 
 
 @router.post("/registrations/{registration_id}/months/{fp}/documents")

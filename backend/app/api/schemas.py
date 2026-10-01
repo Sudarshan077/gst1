@@ -141,3 +141,34 @@ class EnvelopeDataOut(BaseModel):
 
     success: bool = True
     data: dict[str, object] | list[object] | None = None
+
+
+class DraftFieldUpdateIn(BaseModel):
+    """Partial update of extracted fields in the review UI."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    supplier_gstin: str | None = None
+    buyer_gstin: str | None = None
+    invoice_no: str | None = None
+    invoice_date: str | None = None
+    place_of_supply: str | None = None
+    is_inter_state: bool | None = None
+    rchrg: bool | None = None
+    inv_typ: str | None = None
+    taxable_value_paise: int | None = None
+    total_value_paise: int | None = None
+    cgst_paise: int | None = None
+    sgst_paise: int | None = None
+    igst_paise: int | None = None
+    cess_paise: int | None = None
+    supplier_name: str | None = None
+    supplier_address: str | None = None
+    buyer_name: str | None = None
+    buyer_address: str | None = None
+
+
+class RejectIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = None

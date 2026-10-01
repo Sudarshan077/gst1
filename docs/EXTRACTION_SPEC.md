@@ -114,7 +114,7 @@ Runs after LLM extraction, before anything is confirmed. Violations → `NEEDS_R
 
 | Rule | Action on violation |
 |---|---|
-| GSTIN format `^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]{2}$` + mod-36 checksum (both parties) | FLAG — invalid GSTIN never proceeds; review forces human re-key |
+| GSTIN format `^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$` + mod-36 checksum (both parties) | FLAG — invalid GSTIN never proceeds; review forces human re-key |
 | PAN consistency: registration PAN == GSTIN[2..12] | BLOCK (onboarding-level) |
 | Tax recompute: per-line cgst+sgt/igst from `taxable × rate`, HALF_UP per line, sum to invoice totals | AUTO-CORRECT to recomputed; FLAG if printed ≠ recomputed by > ₹1 |
 | Supply type: intra (POS == supplier state) vs inter | COMPUTE — never trust `is_inter_state` from LLM |

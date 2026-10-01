@@ -8,7 +8,10 @@ dependencies = [
     "alembic>=1.13",
     "asyncpg>=0.29",
     "fastapi>=0.115",
+    "httpx>=0.27",
     "minio>=7.2.20",
+    "numpy>=1.26",
+    "opencv-python-headless>=4.10",
     "pillow>=12.3.0",
     "psycopg[binary]>=3.2",
     "pydantic>=2.8",
@@ -16,6 +19,7 @@ dependencies = [
     "pyjwt>=2.9",
     "pymupdf>=1.28.2",
     "pyotp>=2.9",
+    "pytesseract>=0.3.13",
     "python-multipart>=0.0.32",
     "redis>=5.0",
     "sqlalchemy[asyncio]>=2.0",
@@ -43,7 +47,7 @@ select = ["E", "F", "I", "W", "UP", "B", "S", "ASYNC"]
 ignore = ["S101"]  # assert is fine in tests; S101 blocks everywhere else
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "S603"]
+"tests/**" = ["S101", "S105", "S106", "S603", "S607"]
 "app/**/tests/**" = ["S101"]
 
 [tool.mypy]
