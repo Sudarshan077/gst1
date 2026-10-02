@@ -1,6 +1,7 @@
 """Document service: upload, list, detail, presigned URL, dedupe checks.
 
-Follows API_SPECIFICATION.md §5 + SECURITY_AND_ACCESS.md §3.
+Follows API_SPECIFICATION.md §5 + SECURITY_AND_ACCESS.md §3 (v4: every document
+is keyed directly by GSTIN + filing period, never by a surrogate registration id).
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ import uuid
 from typing import Any
 
 from app.api.errors import ServiceError
-from app.core.access import RegistrationAccess, audit
+from app.core.access import GstinAccess, audit
 from app.db.models.extraction import CaptureSource, Document, ExtractionJob, JobStatus
 from app.db.models.gst import FilingPeriod, FilingStatus
 from app.services.storage import _BUCKET, build_document, remove_object, upload_document
@@ -22,8 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 _MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
-async def _ensure_open_period(session: AsyncSession, registration_id: uuid.UUID, fp: str) -> None:
-    period = await session.get(FilingPeriod, (registration_id, fp))
+async def _ensure_open_period(session: AsyncSession, gstin: str, fp: str) -> None:
+    period = await session.get(FilingPeriod, (gstin, fp))
     if period is not None:
         if period.status == FilingStatus.FILED:
             raise ServiceError("period is locked after filing", 423, "PERIOD_LOCKED")
@@ -34,19 +35,19 @@ async def _ensure_open_period(session: AsyncSession, registration_id: uuid.UUID,
         await session.execute(
             pg_insert(FilingPeriod)
             .values(
-                registration_id=registration_id,
+                gstin=gstin,
                 fp=fp,
                 scheme_snapshot="REGULAR_MONTHLY",
                 status=FilingStatus.OPEN,
             )
-            .on_conflict_do_nothing(index_elements=["registration_id", "fp"])
+            .on_conflict_do_nothing(index_elements=["gstin", "fp"])
         )
         await session.flush()
     except IntegrityError:
         await session.rollback()
         raise ServiceError("period concurrently created", 409, "CONFLICT") from None
 
-    period = await session.get(FilingPeriod, (registration_id, fp))
+    period = await session.get(FilingPeriod, (gstin, fp))
     if period is None:
         # Should never happen after a successful insert, but guard anyway.
         raise ServiceError("period concurrently created", 409, "CONFLICT")
@@ -56,7 +57,7 @@ async def _ensure_open_period(session: AsyncSession, registration_id: uuid.UUID,
 
 async def store_documents(
     session: AsyncSession,
-    access: RegistrationAccess,
+    access: GstinAccess,
     fp: str,
     files: list[UploadFile],
     capture_source: str,
@@ -64,7 +65,7 @@ async def store_documents(
     uploaded_by: uuid.UUID,
 ) -> dict[str, Any]:
     """Store a multi-file upload as one document + spawn extraction job."""
-    await _ensure_open_period(session, access.registration_id, fp)
+    await _ensure_open_period(session, access.gstin, fp)
 
     try:
         source = CaptureSource(capture_source)
@@ -87,7 +88,7 @@ async def store_documents(
     dup_stmt = (
         select(Document.id)
         .where(
-            Document.registration_id == access.registration_id,
+            Document.gstin == access.gstin,
             Document.fp == fp,
             Document.sha256 == built["sha256"],
         )
@@ -108,7 +109,7 @@ async def store_documents(
 
     document = Document(
         id=doc_id,
-        registration_id=access.registration_id,
+        gstin=access.gstin,
         fp=fp,
         capture_source=source,
         doc_type=doc_type,
@@ -131,8 +132,7 @@ async def store_documents(
             entity="document",
             entity_id=str(doc_id),
             actor_user_id=uploaded_by,
-            business_id=access.business_id,
-            registration_id=access.registration_id,
+            gstin=access.gstin,
         )
 
         await session.commit()
@@ -162,7 +162,7 @@ async def get_document(session: AsyncSession, doc_id: uuid.UUID) -> Document:
 def _document_envelope(document: Document, job: ExtractionJob | None = None) -> dict[str, Any]:
     return {
         "id": str(document.id),
-        "registration_id": str(document.registration_id),
+        "gstin": document.gstin,
         "fp": document.fp,
         "capture_source": document.capture_source.value,
         "doc_type": document.doc_type,
@@ -183,15 +183,15 @@ def _document_envelope(document: Document, job: ExtractionJob | None = None) -> 
 
 
 async def list_documents(
-    session: AsyncSession, access: RegistrationAccess, fp: str, *, page: int = 0, size: int = 20
+    session: AsyncSession, access: GstinAccess, fp: str, *, page: int = 0, size: int = 20
 ) -> tuple[list[dict[str, Any]], int]:
     stmt = (
         select(Document, ExtractionJob)
         .outerjoin(ExtractionJob, ExtractionJob.document_id == Document.id)
-        .where(Document.registration_id == access.registration_id, Document.fp == fp)
+        .where(Document.gstin == access.gstin, Document.fp == fp)
     )
     count_stmt = select(func.count()).select_from(Document).where(
-        Document.registration_id == access.registration_id, Document.fp == fp
+        Document.gstin == access.gstin, Document.fp == fp
     )
     total = (await session.execute(count_stmt)).scalar_one()
     rows = (
@@ -203,7 +203,7 @@ async def list_documents(
 
 
 async def get_document_detail(
-    session: AsyncSession, doc_id: uuid.UUID, access: RegistrationAccess
+    session: AsyncSession, doc_id: uuid.UUID, access: GstinAccess
 ) -> dict[str, Any]:
     row = (
         await session.execute(
@@ -212,7 +212,7 @@ async def get_document_detail(
             )
             .where(
                 Document.id == doc_id,
-                Document.registration_id == access.registration_id,
+                Document.gstin == access.gstin,
             )
         )
     ).one_or_none()

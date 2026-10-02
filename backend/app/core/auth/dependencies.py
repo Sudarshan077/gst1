@@ -1,7 +1,7 @@
 """JWT bearer + step-up dependencies — the auth slice of the task 0.5 guard.
 
 Only authentication (who are you). Authorization (which business/registration)
-lands in task 0.5's require_business_access on top of this.
+lands in task 0.5's require_gstin_access on top of this.
 """
 
 from __future__ import annotations
@@ -78,6 +78,8 @@ async def require_stepup(
     if user is None:
         raise InvalidCredentials("unknown user")
     identifier = user.email or user.mobile
+    if not identifier:
+        raise InvalidCredentials("user has no login identifier")
     redis: Redis = get_redis()
     await verify_otp(redis, identifier, otp_header)
     return user_id

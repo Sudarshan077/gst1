@@ -12,14 +12,13 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from app.core.auth.tokens import verify_access_token
-from app.core.businesses.service import create_business, create_registration
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from tests.auth_helpers import make_mobile, register_and_login
-from tests.gstin_fixtures import make_gstin, make_pan
+from tests.v4_helpers import seed_gstin_for_user
 
 
 @pytest.fixture()
@@ -44,19 +43,12 @@ async def test_upload_pdf_stores_versioned_doc(
     """POST multipart PDF -> 200, DB row + MinIO key {gstin}/{fp}/{docId}."""
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="Test", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="27"),
-        )
-        reg_id, gstin, fp = str(reg.id), reg.gstin, "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="27")
+    gstin, fp = account.gstin, "092026"
 
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("invoice.pdf", io.BytesIO(minimal_pdf), "application/pdf")},
@@ -78,16 +70,9 @@ async def test_photo_burst_merge(
 
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="Burst", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="29"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="29")
+    gstin, fp = account.gstin, "092026"
 
     def make_image(name: str, colour: tuple[int, int, int]) -> tuple[str, io.BytesIO, str]:
         img = Image.new("RGB", (100, 100), colour)
@@ -101,7 +86,7 @@ async def test_photo_burst_merge(
         ("files", make_image("b.png", (0, 255, 0))),
     ]
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PHOTO"},
         files=files,
@@ -119,19 +104,12 @@ async def test_upload_rejects_bad_magic_byte(
     """Files without recognized magic bytes return 422."""
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="Bad", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="07"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="07")
+    gstin, fp = account.gstin, "092026"
 
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("evil.exe", io.BytesIO(b"MZ..."), "application/pdf")},
@@ -147,20 +125,13 @@ async def test_upload_rejects_oversized(
     """Files > 25 MB return 422."""
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="Big", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="06"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="06")
+    gstin, fp = account.gstin, "092026"
 
     big = b"%PDF" + b"0" * (26 * 1024 * 1024)
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("big.pdf", io.BytesIO(big), "application/pdf")},
@@ -177,20 +148,13 @@ async def test_duplicate_upload_rejected(
     """Second upload of the exact same bytes returns 422 dedupe error."""
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="Dup", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="24"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="24")
+    gstin, fp = account.gstin, "092026"
 
     for _ in range(2):
         response = await client.post(
-            f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+            f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
             headers=headers,
             data={"capture_source": "PDF_SCAN"},
             files={"files": ("dup.pdf", io.BytesIO(minimal_pdf), "application/pdf")},
@@ -209,18 +173,9 @@ async def test_duplicate_after_resize_rejected(
 
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(
-            session, legal_name="ResizeDup", pan=pan, created_by=user_id
-        )
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="33"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="33")
+    gstin, fp = account.gstin, "092026"
 
     # one dimension exceeds 4096, so the service resizes deterministically.
     img = Image.new("RGB", (5000, 100), (0, 0, 255))
@@ -231,7 +186,7 @@ async def test_duplicate_after_resize_rejected(
 
     for _ in range(2):
         response = await client.post(
-            f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+            f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
             headers=headers,
             data={"capture_source": "PHOTO"},
             files={"files": ("big.png", io.BytesIO(image_bytes), "image/png")},
@@ -251,16 +206,9 @@ async def test_photo_burst_with_pdf_frame_422(
 
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="Mixed", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="11"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="11")
+    gstin, fp = account.gstin, "092026"
 
     img = Image.new("RGB", (100, 100), (255, 0, 0))
     png_buf = io.BytesIO()
@@ -272,7 +220,7 @@ async def test_photo_burst_with_pdf_frame_422(
         ("files", ("frame.pdf", io.BytesIO(minimal_pdf), "application/pdf")),
     ]
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PHOTO"},
         files=files,
@@ -288,19 +236,12 @@ async def test_undecodable_jpeg_422(
     """JPEG magic prefix followed by garbage returns 422, not a PIL traceback."""
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="BadJpeg", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="12"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="12")
+    gstin, fp = account.gstin, "092026"
 
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PHOTO"},
         files={"files": ("bad.jpg", io.BytesIO(b"\xff\xd8\xff" + b"garbage"), "image/jpeg")},
@@ -319,16 +260,9 @@ async def test_page_cap_rejected(
 
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="PageCap", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="14"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="14")
+    gstin, fp = account.gstin, "092026"
 
     real_cap = get_settings().max_document_pages
     get_settings().max_document_pages = 1
@@ -345,7 +279,7 @@ async def test_page_cap_rejected(
             ("files", make_image("b.png", (0, 255, 0))),
         ]
         response = await client.post(
-            f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+            f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
             headers=headers,
             data={"capture_source": "PHOTO"},
             files=files,
@@ -365,19 +299,12 @@ async def test_presigned_url_30_min(
 
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="View", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="27"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="27")
+    gstin, fp = account.gstin, "092026"
 
     upload_resp = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("view.pdf", io.BytesIO(minimal_pdf), "application/pdf")},
@@ -401,21 +328,12 @@ async def test_image_page_param(
     """?page=1 succeeds; ?page=2 on a 1-page doc returns 422."""
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(
-            session, legal_name="PageParam", pan=pan, created_by=user_id
-        )
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="27"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="27")
+    gstin, fp = account.gstin, "092026"
 
     upload_resp = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("page.pdf", io.BytesIO(minimal_pdf), "application/pdf")},
@@ -437,7 +355,7 @@ async def test_upload_requires_auth(
 ) -> None:
     """Unauthenticated POST returns 401."""
     response = await client.post(
-        "/api/v1/registrations/00000000-0000-0000-0000-000000000000/months/092026/documents",
+        "/api/v1/gst-accounts/00AAAAAAAAAAAAAAA/months/092026/documents",
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("x.pdf", io.BytesIO(b"%PDF"), "application/pdf")},
     )
@@ -448,28 +366,23 @@ async def test_upload_cross_tenant_returns_404(
     client: AsyncClient,
     api_sessionmaker: async_sessionmaker[Any],
 ) -> None:
-    """Uploader with no access to the registration gets 404 (existence hidden)."""
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        business = await create_business(session, legal_name="Other", pan=pan, created_by=None)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="27"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    """Uploader with no access to the GSTIN gets 404 (existence hidden)."""
+    owner = await register_and_login(client, make_mobile())
+    user_id = verify_access_token(owner["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="27")
+    gstin, fp = account.gstin, "092026"
 
-    # Create a second user who has no access to the business above.
+    # Create a second user who has no access to the GSTIN above.
     attacker = await register_and_login(client, make_mobile())
     attacker_headers = {"Authorization": f"Bearer {attacker['access_token']}"}
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=attacker_headers,
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("x.pdf", io.BytesIO(b"%PDF"), "application/pdf")},
     )
     assert response.status_code == 404
-    assert response.json()["error"]["code"] == "BUSINESS_NOT_FOUND"
+    assert response.json()["error"]["code"] == "GSTIN_NOT_FOUND"
 
 
 async def test_doc_detail_cross_tenant_returns_404(
@@ -479,22 +392,13 @@ async def test_doc_detail_cross_tenant_returns_404(
 ) -> None:
     """Owner-access {doc_id} test: other user cannot GET /documents/{docId}."""
     tokens = await register_and_login(client, make_mobile())
-    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(
-            session, legal_name="OwnerDoc", pan=pan, created_by=user_id
-        )
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="27"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}  # owner
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="27")
+    gstin, fp = account.gstin, "092026"
 
     upload_resp = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("owner.pdf", io.BytesIO(minimal_pdf), "application/pdf")},
@@ -506,7 +410,7 @@ async def test_doc_detail_cross_tenant_returns_404(
     attacker_headers = {"Authorization": f"Bearer {attacker['access_token']}"}
     response = await client.get(f"/api/v1/documents/{doc_id}", headers=attacker_headers)
     assert response.status_code == 404
-    assert response.json()["error"]["code"] == "BUSINESS_NOT_FOUND"
+    assert response.json()["error"]["code"] == "GSTIN_NOT_FOUND"
 
 
 async def test_multifile_non_burst_rejected_422(
@@ -518,18 +422,9 @@ async def test_multifile_non_burst_rejected_422(
 
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(
-            session, legal_name="MultiNonBurst", pan=pan, created_by=user_id
-        )
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="09"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="09")
+    gstin, fp = account.gstin, "092026"
 
     def make_image(name: str, colour: tuple[int, int, int]) -> tuple[str, io.BytesIO, str]:
         img = Image.new("RGB", (100, 100), colour)
@@ -551,7 +446,7 @@ async def test_multifile_non_burst_rejected_422(
         ).scalar_one()
 
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PDF_SCAN"},
         files=files,
@@ -573,19 +468,20 @@ async def test_sha256_unique_index_exists(
     client: AsyncClient,
     api_sessionmaker: async_sessionmaker[Any],
 ) -> None:
-    """The migration created the unique index on (registration_id, fp, sha256)."""
+    """The migration created the unique index on (gstin, fp, sha256)."""
 
     async with api_sessionmaker() as session:
         indexdef = (
             await session.execute(
                 text(
                     "SELECT indexdef FROM pg_indexes "
-                    "WHERE schemaname='extraction' AND indexname='uq_documents_reg_fp_sha256'"
+                    "WHERE schemaname='extraction' "
+                    "AND indexname='uq_documents_gstin_fp_sha256'"
                 )
             )
         ).scalar_one()
         assert "UNIQUE" in indexdef
-        assert "registration_id" in indexdef
+        assert "gstin" in indexdef
         assert "fp" in indexdef
         assert "sha256" in indexdef
 
@@ -598,22 +494,13 @@ async def test_duplicate_upload_rejected_single_process_409(
     """Single-process duplicate upload hits the unique index and returns 409."""
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(
-            session, legal_name="DupIndex", pan=pan, created_by=user_id
-        )
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="08"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="08")
+    gstin, fp = account.gstin, "092026"
 
     for _ in range(2):
         response = await client.post(
-            f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+            f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
             headers=headers,
             data={"capture_source": "PDF_SCAN"},
             files={"files": ("dup.pdf", io.BytesIO(minimal_pdf), "application/pdf")},
@@ -633,20 +520,13 @@ async def test_concurrent_period_create_race_safe(
 
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="Race", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="05"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="05")
+    gstin, fp = account.gstin, "092026"
 
     async def upload() -> int:
         resp = await client.post(
-            f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+            f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
             headers=headers,
             data={"capture_source": "PDF_SCAN"},
             files={"files": ("race.pdf", io.BytesIO(minimal_pdf), "application/pdf")},
@@ -663,8 +543,8 @@ async def test_concurrent_period_create_race_safe(
             await session.execute(
                 text(
                     "SELECT count(*) FROM gst.filing_periods "
-                    "WHERE registration_id=:rid AND fp=:fp"
-                ).bindparams(rid=reg.id, fp=fp)
+                    "WHERE gstin=:rid AND fp=:fp"
+                ).bindparams(rid=gstin, fp=fp)
             )
         ).scalar_one()
         assert count == 1
@@ -678,21 +558,12 @@ async def test_unparseable_pdf_422_and_no_rows_stored(
 
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(
-            session, legal_name="Unparseable", pan=pan, created_by=user_id
-        )
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="03"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="03")
+    gstin, fp = account.gstin, "092026"
 
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("bad.pdf", io.BytesIO(b"%PDF-1.4\nbroken"), "application/pdf")},
@@ -704,8 +575,8 @@ async def test_unparseable_pdf_422_and_no_rows_stored(
             await session.execute(
                 text(
                     "SELECT count(*) FROM extraction.documents "
-                    "WHERE registration_id=:rid AND fp=:fp"
-                ).bindparams(rid=reg.id, fp=fp)
+                    "WHERE gstin=:rid AND fp=:fp"
+                ).bindparams(rid=gstin, fp=fp)
             )
         ).scalar_one()
         assert count == 0
@@ -719,23 +590,14 @@ async def test_pagination_fields_present(
     """GET list returns the pagination envelope per API_SPEC §15."""
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(
-            session, legal_name="Pagination", pan=pan, created_by=user_id
-        )
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="02"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="02")
+    gstin, fp = account.gstin, "092026"
 
     # Upload two docs; second must differ to avoid dedupe.
     for i in range(2):
         response = await client.post(
-            f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+            f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
             headers=headers,
             data={"capture_source": "PDF_SCAN"},
             files={"files": (f"p{i}.pdf", io.BytesIO(minimal_pdf + bytes([i])), "application/pdf")},
@@ -743,7 +605,7 @@ async def test_pagination_fields_present(
         assert response.status_code == 200
 
     response = await client.get(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents?page=0&size=1",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents?page=0&size=1",
         headers=headers,
     )
     assert response.status_code == 200
@@ -755,7 +617,7 @@ async def test_pagination_fields_present(
     assert len(payload["content"]) == 1
 
     page2 = await client.get(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents?page=1&size=1",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents?page=1&size=1",
         headers=headers,
     )
     assert page2.status_code == 200
@@ -780,16 +642,9 @@ async def test_orphan_object_compensating_delete(
 
     tokens = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    async with api_sessionmaker() as session:
-        pan = make_pan()
-        user_id = verify_access_token(tokens["access_token"])
-        business = await create_business(session, legal_name="Orphan", pan=pan, created_by=user_id)
-        reg = await create_registration(
-            session,
-            business_id=business.id,
-            gstin=make_gstin(pan=pan, state_code="01"),
-        )
-        reg_id, fp = str(reg.id), "092026"
+    user_id = verify_access_token(tokens["access_token"])
+    account = await seed_gstin_for_user(api_sessionmaker, user_id, state_code="01")
+    gstin, fp = account.gstin, "092026"
 
 
     calls = 0
@@ -802,7 +657,7 @@ async def test_orphan_object_compensating_delete(
     monkeypatch.setattr(documents_module.AsyncSession, "commit", fake_commit)  # type: ignore[attr-defined]
 
     response = await client.post(
-        f"/api/v1/registrations/{reg_id}/months/{fp}/documents",
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         data={"capture_source": "PDF_SCAN"},
         files={"files": ("orphan.pdf", io.BytesIO(minimal_pdf), "application/pdf")},
@@ -811,7 +666,7 @@ async def test_orphan_object_compensating_delete(
     assert response.json()["error"]["code"] == "CONFLICT"
 
     client_minio: Minio = _minio_client()
-    prefix = f"{reg.gstin}/{fp}/"
+    prefix = f"{gstin}/{fp}/"
     objects = list(client_minio.list_objects("gst-docs", prefix=prefix, recursive=True))
     # No objects for this registration/fp prefix after compensating delete.
     assert len(objects) == 0

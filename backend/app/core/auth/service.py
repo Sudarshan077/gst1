@@ -19,7 +19,7 @@ from app.core.auth.errors import (
     TotpInvalid,
 )
 from app.core.auth.redis_client import get_redis
-from app.db.models.core import User, UserGstAccess
+from app.db.models.core import GstAccount, User, UserGstAccess
 
 
 def _user_out(user: User) -> dict[str, object]:
@@ -125,11 +125,19 @@ async def stepup(session: AsyncSession, user_id: uuid.UUID, otp: str) -> dict[st
     return {"stepup_token": token_svc.create_stepup_token(user_id)}
 
 
+def _login_identifier(user: User) -> str:
+    """One login identifier per user; v4 allows email OR mobile, so guard both."""
+    identifier = user.email or user.mobile
+    if not identifier:
+        raise InvalidCredentials("user has no login identifier")
+    return str(identifier)
+
+
 async def _identifier_of(session: AsyncSession, user_id: uuid.UUID) -> str:
     user = await session.get(User, user_id)
     if user is None:
         raise InvalidCredentials("unknown user")
-    return user.email or user.mobile
+    return _login_identifier(user)
 
 
 async def totp_setup(session: AsyncSession, user_id: uuid.UUID) -> dict[str, str]:
@@ -141,10 +149,9 @@ async def totp_setup(session: AsyncSession, user_id: uuid.UUID) -> dict[str, str
     secret = totp_svc.generate_secret()
     user.totp_secret = secret
     await session.commit()
-    identifier = user.email or user.mobile
     return {
         "secret": secret,
-        "qr_uri": totp_svc.provisioning_uri(secret, identifier),
+        "qr_uri": totp_svc.provisioning_uri(secret, _login_identifier(user)),
     }
 
 
@@ -180,20 +187,27 @@ async def update_user_totp_secret(
 
 
 async def me(session: AsyncSession, user_id: uuid.UUID) -> dict[str, object]:
-    """GET /auth/me — profile + accessible GSTINs (v4: unified GSTIN-first model).
+    """GET /auth/me — profile + every GSTIN the user can operate on, with role.
 
-    v4.0 removed businesses/ca_firms; access is resolved through
-    user_gst_access (users.id -> gst_accounts.gstin). The v2 firm_id /
-    businesses fields are gone from the response.
+    v4.0 removed businesses/ca_firms; access resolves through user_gst_access
+    (users.id -> gst_accounts.gstin). The v2 firm_id / businesses fields are gone
+    from the response.
     """
     user = await session.get(User, user_id)
     if user is None:
         raise TokenInvalid("user no longer exists")
-    access_rows = await session.execute(
-        select(UserGstAccess.gstin).where(UserGstAccess.user_id == user_id)
-    )
-    gstins = [str(row[0]) for row in access_rows]
+    rows = (
+        await session.execute(
+            select(UserGstAccess.gstin, UserGstAccess.role, GstAccount.legal_name)
+            .join(GstAccount, GstAccount.gstin == UserGstAccess.gstin)
+            .where(UserGstAccess.user_id == user_id)
+            .order_by(UserGstAccess.granted_at.asc())
+        )
+    ).all()
     return {
         "user": _user_out(user),
-        "gstins": gstins,
+        "gst_accounts": [
+            {"gstin": str(gstin), "role": role.value, "legal_name": legal_name}
+            for gstin, role, legal_name in rows
+        ],
     }

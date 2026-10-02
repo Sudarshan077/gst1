@@ -47,6 +47,11 @@ def validate_gstin(gstin: str, pan: str | None = None) -> str:
     return g
 
 
+def pan_from_gstin(gstin: str) -> str:
+    """PAN embedded at GSTIN positions 3-12 (v4: PAN is derived, not entered)."""
+    return validate_gstin(gstin)[2:12]
+
+
 def gstin_state_code(gstin: str) -> str:
     """First two characters of a validated GSTIN."""
     return validate_gstin(gstin)[:2]

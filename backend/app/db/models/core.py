@@ -47,7 +47,7 @@ class FilingScheme(enum.StrEnum):
 
 
 class User(Base):
-    """Person identity; email is the login credential."""
+    """Person identity; email/mobile credential."""
 
     __tablename__ = "users"
     __table_args__ = {"schema": CORE_SCHEMA}
@@ -55,10 +55,15 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True)
     mobile: Mapped[str | None] = mapped_column(String(15), unique=True)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    mobile_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    totp_secret: Mapped[str | None] = mapped_column(String(255))
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -1,4 +1,4 @@
-"""Auth me/stepup/firm integration tests for task 0.7A."""
+"""Auth me/stepup integration tests (task 0.7A, v4 unified profile)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from tests.auth_helpers import _register_and_login
-from tests.gstin_fixtures import make_pan
 
 pytestmark = pytest.mark.asyncio
 
@@ -31,14 +30,12 @@ def _mobile() -> str:
     return "9" + "".join(_rng.choice("0123456789") for _ in range(9))
 
 
-async def _register_totp_firm(
+async def _register_totp(
     client: AsyncClient,
-    api_sessionmaker: SessionMaker,
-    pan: str | None = None,
-) -> tuple[dict[str, Any], dict[str, Any], str, uuid.UUID]:
-    """Full CA onboarding: register -> totp setup+verify -> create firm.
+) -> tuple[dict[str, Any], str, uuid.UUID]:
+    """Register -> TOTP setup + verify.
 
-    Returns (token_data, firm_out, mobile, user_id).
+    Returns (token_data, mobile, user_id).
     """
     mobile = _mobile()
     data = await _register_and_login(client, mobile)
@@ -56,65 +53,30 @@ async def _register_totp_firm(
     )
     assert verify.status_code == 200, verify.text
 
-    firm_pan = pan or make_pan()
-    firm_resp = await client.post(
-        "/api/v1/firm",
-        headers=headers,
-        json={"firm_name": "Test Firm", "pan": firm_pan},
-    )
-    assert firm_resp.status_code == 200, firm_resp.text
-
     user_id = token_svc.verify_access_token(data["access_token"])
-    return data, firm_resp.json()["data"], mobile, user_id
+    return data, mobile, user_id
 
 
-async def test_me_after_firm_onboarding(
+async def test_me_v4_unified_profile(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
-    """4(a): REGISTER -> TOTP -> POST /firm -> GET /auth/me = 200, firm present."""
-    data, firm, mobile, user_id = await _register_totp_firm(
-        client, api_sessionmaker
-    )
+    """v4: REGISTER -> TOTP -> GET /auth/me = 200, returns user + gstins list."""
+    data, mobile, user_id = await _register_totp(client)
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     me = await client.get("/api/v1/auth/me", headers=headers)
     assert me.status_code == 200, me.text
     body = me.json()
     assert body["success"] is True
-    assert body["data"]["firm"] == firm["id"]
-    assert body["data"]["businesses"] == []
+    assert "gst_accounts" in body["data"]
+    assert isinstance(body["data"]["gst_accounts"], list)
     assert body["data"]["user"]["totp_enabled"] is True
-
-
-async def test_me_second_firm_returns_primary_earliest_firm(
-    client: AsyncClient, api_sessionmaker: SessionMaker
-) -> None:
-    """4(b): second POST /firm + /me still 200 with the FIRST firm id."""
-    data, firm1, _mobile1, _uid = await _register_totp_firm(
-        client, api_sessionmaker
-    )
-    headers = {"Authorization": f"Bearer {data['access_token']}"}
-
-    firm2_resp = await client.post(
-        "/api/v1/firm",
-        headers=headers,
-        json={"firm_name": "Second Firm", "pan": make_pan()},
-    )
-    assert firm2_resp.status_code == 200, firm2_resp.text
-    firm2 = firm2_resp.json()["data"]
-
-    me = await client.get("/api/v1/auth/me", headers=headers)
-    assert me.status_code == 200, me.text
-    assert me.json()["data"]["firm"] == firm1["id"]
-    assert firm2["id"] != firm1["id"]
 
 
 async def test_require_stepup_contract(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
     """4(c): no header -> 403 STEP_UP_REQUIRED; own stepup -> ok; other -> 401."""
-    data, _firm, _mobile, user_id = await _register_totp_firm(
-        client, api_sessionmaker
-    )
+    data, _mobile, user_id = await _register_totp(client)
 
     from starlette.requests import Request
 
@@ -145,22 +107,16 @@ async def test_require_stepup_contract(
     assert token_exc_info.value.code == "TOKEN_INVALID"
 
 
-async def test_firm_create_shape_and_totp_guard(
+async def test_totp_guard_on_protected_action(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
-    """4(d): POST /firm 200 shape and 403 TOTP_REQUIRED for a TOTP-less user."""
+    """4(d): TOTP-less user profile reports totp_enabled == False."""
     mobile = _mobile()
     data = await _register_and_login(client, mobile)
     headers = {"Authorization": f"Bearer {data['access_token']}"}
-
-    # TOTP-less user cannot create a firm
-    guard = await client.post(
-        "/api/v1/firm",
-        headers=headers,
-        json={"firm_name": "Too Early", "pan": make_pan()},
-    )
-    assert guard.status_code == 403
-    assert guard.json()["error"]["code"] == "TOTP_REQUIRED"
+    me = await client.get("/api/v1/auth/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["data"]["user"]["totp_enabled"] is False
 
     # TOTP setup + verify
     setup = await client.post("/api/v1/auth/totp/setup", headers=headers)
@@ -171,15 +127,9 @@ async def test_firm_create_shape_and_totp_guard(
         json={"code": pyotp.TOTP(secret).now()},
     )
 
-    firm_resp = await client.post(
-        "/api/v1/firm",
-        headers=headers,
-        json={"firm_name": "Real Firm", "pan": make_pan()},
-    )
-    assert firm_resp.status_code == 200, firm_resp.text
-    firm = firm_resp.json()["data"]
-    assert set(firm.keys()) == {"id", "firm_name", "pan", "ca_code"}
-    assert firm["ca_code"].startswith("CAF-")
+    me_after = await client.get("/api/v1/auth/me", headers=headers)
+    assert me_after.status_code == 200
+    assert me_after.json()["data"]["user"]["totp_enabled"] is True
 
 
 async def test_stepup_falls_back_mobile_when_email_otp_requested(

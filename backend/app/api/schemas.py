@@ -87,39 +87,27 @@ class TotpEnabledOut(BaseModel):
     enabled: bool
 
 
-class MeOut(BaseModel):
+class GstinRefOut(BaseModel):
+    """One GSTIN the user can operate on, with their role on it."""
+
     model_config = ConfigDict(extra="forbid")
 
+    gstin: str
+    role: str
+    legal_name: str
+
+
+class MeOut(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     user: UserOut
-    businesses: list[str] = []  # ids; resolved fully by task 0.5's guard
-    firm: str | None = None  # firm id if the user is a firm member
+    gst_accounts: list[GstinRefOut] = []
 
 
 class MeEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
     success: bool = True
     data: MeOut
-
-
-class FirmEnvelope(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    success: bool = True
-    data: FirmOut
-
-class FirmCreateIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    firm_name: str = Field(min_length=1, max_length=255)
-    pan: str = Field(min_length=10, max_length=10, pattern=r"^[A-Z]{5}[0-9]{4}[A-Z]$")
-
-
-class FirmOut(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    firm_name: str
-    pan: str
-    ca_code: str
 
 
 class EnvelopeError(BaseModel):

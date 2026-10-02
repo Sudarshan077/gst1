@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from app.db import base as app_db_base
 from app.db.base import Base
+from sqlalchemy import String, UniqueConstraint
 
 app_db_base.all_models()
 
@@ -63,9 +64,11 @@ def test_gst_accounts_gstin_is_primary_key() -> None:
     gst_accounts = Base.metadata.tables["core.gst_accounts"]
     pk_cols = [c.name for c in gst_accounts.primary_key.columns]
     assert pk_cols == ["gstin"]
-    assert gst_accounts.columns["gstin"].type.length == 15
+    gstin_type = gst_accounts.columns["gstin"].type
+    assert isinstance(gstin_type, String) and gstin_type.length == 15
     # pan derived from gstin[2:12]
-    assert gst_accounts.columns["pan"].type.length == 10
+    pan_type = gst_accounts.columns["pan"].type
+    assert isinstance(pan_type, String) and pan_type.length == 10
 
 
 def test_user_gst_access_links_users_to_gstin() -> None:
@@ -75,9 +78,9 @@ def test_user_gst_access_links_users_to_gstin() -> None:
     assert "core.users.id" in fk_targets, fk_targets
     assert "core.gst_accounts.gstin" in fk_targets, fk_targets
     uq = {
-        tuple(uq.columns.keys())
-        for uq in access.constraints
-        if uq.__class__.__name__ == "UniqueConstraint"
+        tuple(constraint.columns.keys())
+        for constraint in access.constraints
+        if isinstance(constraint, UniqueConstraint)
     }
     assert ("user_id", "gstin") in uq, uq
 

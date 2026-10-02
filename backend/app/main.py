@@ -17,11 +17,8 @@ from app.api.errors import (
     value_error_handler,
 )
 from app.api.routers.auth import router as auth_router
-from app.api.routers.business import RegRouter
-from app.api.routers.business import router as business_router
 from app.api.routers.documents import router as documents_router
-from app.api.routers.firm import router as firm_router
-from app.api.routers.links import router as links_router
+from app.api.routers.gst_accounts import router as gst_accounts_router
 from app.core.auth.errors import AuthError
 
 Handler = Callable[[Request, Exception], Awaitable[JSONResponse]]
@@ -29,12 +26,8 @@ Handler = Callable[[Request, Exception], Awaitable[JSONResponse]]
 
 def create_app() -> FastAPI:
     app = FastAPI(title="GST Filing Platform API", version="0.1.0")
-    app.include_router(auth_router, prefix="/api/v1")
-    app.include_router(business_router, prefix="/api/v1")
-    app.include_router(RegRouter, prefix="/api/v1")
-    app.include_router(documents_router, prefix="/api/v1")
-    app.include_router(firm_router, prefix="/api/v1")
-    app.include_router(links_router, prefix="/api/v1")
+    for r in (auth_router, gst_accounts_router, documents_router):
+        app.include_router(r, prefix="/api/v1")
 
     # Cast-free handler registration: the handlers match Starlette's expected
     # signature exactly (Request, Exc) -> Awaitable[Response].

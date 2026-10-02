@@ -1,4 +1,10 @@
-"""Document router: upload, list, detail, presigned view (API_SPEC §5)."""
+"""Document router: upload, list, detail, presigned view (API_SPEC §5).
+
+v4.0 (TECHNICAL_ARCHITECTURE §3): documents hang off the GSTIN, so the
+collection routes are `/gst-accounts/{gstin}/months/{fp}/documents`. Routes
+keyed by `doc_id` resolve the document first and then re-run the same guard
+against that document's GSTIN — a cross-tenant doc id must resolve to 404.
+"""
 
 from __future__ import annotations
 
@@ -10,9 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import DraftFieldUpdateIn, RejectIn
 from app.core.access import (
-    RegistrationAccess,
-    require_registration_access,
-    resolve_registration_access,
+    GstinAccess,
+    require_gstin_access,
+    resolve_gstin_access,
 )
 from app.core.auth.dependencies import require_user
 from app.db.session import get_session
@@ -36,14 +42,24 @@ router = APIRouter(tags=["documents"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 UserDep = Annotated[uuid.UUID, Depends(require_user)]
 
+_REVIEW_WRITE = "document review requires FILER or ADMIN on the GSTIN"
 _ALLOWED_DOC_TYPES = {"UNCLASSIFIED", "INV", "CDN", "DBN", "OTHER"}
 
 
-@router.get("/registrations/{registration_id}/months/{fp}/review-queue")
+async def _doc_access(
+    session: AsyncSession, user_id: uuid.UUID, doc_id: uuid.UUID
+) -> tuple[Any, GstinAccess]:
+    """Resolve a document by id and guard it against its own GSTIN."""
+    doc = await get_document(session, doc_id)
+    access = await resolve_gstin_access(session, user_id, doc.gstin)
+    return doc, access
+
+
+@router.get("/gst-accounts/{gstin}/months/{fp}/review-queue")
 async def review_queue(
-    registration_id: str,
+    gstin: str,
     fp: str,
-    access: Annotated[RegistrationAccess, Depends(require_registration_access("registration_id"))],
+    access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
     session: SessionDep,
 ) -> dict[str, Any]:
     rows = await get_review_queue(session, access, fp)
@@ -56,8 +72,7 @@ async def get_doc_draft(
     user_id: UserDep,
     session: SessionDep,
 ) -> dict[str, Any]:
-    doc = await get_document(session, doc_id)
-    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    _doc, access = await _doc_access(session, user_id, doc_id)
     data = await get_draft(session, doc_id, access)
     return {"success": True, "data": data}
 
@@ -69,8 +84,11 @@ async def put_doc_draft(
     user_id: UserDep,
     session: SessionDep,
 ) -> dict[str, Any]:
-    doc = await get_document(session, doc_id)
-    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    _doc, access = await _doc_access(session, user_id, doc_id)
+    if not access.can_write:
+        from app.core.access import PermissionDenied
+
+        raise PermissionDenied(_REVIEW_WRITE)
     data = await update_draft(session, doc_id, access, user_id, body.model_dump(exclude_unset=True))
     return {"success": True, "data": data}
 
@@ -81,8 +99,11 @@ async def confirm_doc(
     user_id: UserDep,
     session: SessionDep,
 ) -> dict[str, Any]:
-    doc = await get_document(session, doc_id)
-    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    _doc, access = await _doc_access(session, user_id, doc_id)
+    if not access.can_write:
+        from app.core.access import PermissionDenied
+
+        raise PermissionDenied(_REVIEW_WRITE)
     data = await confirm_draft(session, doc_id, access, user_id)
     return {"success": True, "data": data}
 
@@ -94,17 +115,20 @@ async def reject_doc(
     user_id: UserDep,
     session: SessionDep,
 ) -> dict[str, Any]:
-    doc = await get_document(session, doc_id)
-    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    _doc, access = await _doc_access(session, user_id, doc_id)
+    if not access.can_write:
+        from app.core.access import PermissionDenied
+
+        raise PermissionDenied(_REVIEW_WRITE)
     data = await reject_document(session, doc_id, access, user_id, body.reason)
     return {"success": True, "data": data}
 
 
-@router.post("/registrations/{registration_id}/months/{fp}/documents")
+@router.post("/gst-accounts/{gstin}/months/{fp}/documents")
 async def upload_documents(
-    registration_id: str,
+    gstin: str,
     fp: str,
-    access: Annotated[RegistrationAccess, Depends(require_registration_access("registration_id"))],
+    access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
     session: SessionDep,
     user_id: UserDep,
     capture_source: Annotated[str, Form()],
@@ -113,7 +137,12 @@ async def upload_documents(
 ) -> dict[str, Any]:
     if len(doc_type) > 16 or doc_type not in _ALLOWED_DOC_TYPES:
         from app.api.errors import ServiceError
+
         raise ServiceError("invalid doc_type", 422, "VALIDATION_ERROR")
+    if not access.can_write:
+        from app.core.access import PermissionDenied
+
+        raise PermissionDenied("upload requires FILER or ADMIN on the GSTIN")
     result = await store_documents(
         session,
         access=access,
@@ -126,11 +155,11 @@ async def upload_documents(
     return {"success": True, "data": result}
 
 
-@router.get("/registrations/{registration_id}/months/{fp}/documents")
+@router.get("/gst-accounts/{gstin}/months/{fp}/documents")
 async def list_docs(
-    registration_id: str,
+    gstin: str,
     fp: str,
-    access: Annotated[RegistrationAccess, Depends(require_registration_access("registration_id"))],
+    access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
     session: SessionDep,
     page: Annotated[int, Query(ge=0)] = 0,
     size: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -154,8 +183,7 @@ async def get_doc(
     user_id: UserDep,
     session: SessionDep,
 ) -> dict[str, Any]:
-    doc = await get_document(session, doc_id)
-    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    _doc, access = await _doc_access(session, user_id, doc_id)
     detail = await get_document_detail(session, doc_id, access)
     return {"success": True, "data": detail}
 
@@ -167,12 +195,12 @@ async def get_doc_image(
     session: SessionDep,
     page: Annotated[int, Query(ge=1)] = 1,
 ) -> dict[str, Any]:
-    doc = await get_document(session, doc_id)
-    access = await resolve_registration_access(session, user_id, doc.registration_id)
+    _doc, access = await _doc_access(session, user_id, doc_id)
     detail = await get_document_detail(session, doc_id, access)
     page_count = detail["page_count"] or 1
     if page > page_count:
         from app.api.errors import ServiceError
+
         raise ServiceError("page exceeds document page count", 422, "VALIDATION_ERROR")
     url = presigned_view_url(detail["minio_key"])
     return {

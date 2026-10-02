@@ -22,6 +22,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     Uuid,
     func,
 )
@@ -58,6 +59,9 @@ class Document(Base):
 
     __tablename__ = "documents"
     __table_args__ = (
+        UniqueConstraint(
+            "gstin", "fp", "sha256", name="uq_documents_gstin_fp_sha256"
+        ),
         Index("ix_documents_gstin_fp", "gstin", "fp"),
         Index("ix_documents_sha256", "sha256"),
         {"schema": EXTRACTION_SCHEMA},
