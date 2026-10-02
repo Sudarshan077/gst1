@@ -24,8 +24,8 @@
 |---|---|---|---|
 | **Business owner** ("Client") | Runs a business with 1+ GSTINs; not a tax expert | Dump photos of bills monthly; know it's handled | Upload in minutes, see month status + deadline countdown, zero retyping |
 | **Accounts clerk** (client side) | Does the bill collection | Fast multi-upload; clear review queue | All bills for the month confirmed before deadline |
-| **CA partner** | Owns a CA firm; accountable for filings | Roster of all clients with per-GSTIN status; final review; export | Month-end for 30 clients in hours, not weeks |
-| **CA / articled clerk** (firm side) | Does the grind work | Review queue, reconciliation report, bulk onboarding | No retyping; unmatched ITC list is actionable |
+| **Accountant / CA** | Manages filings for one or more GSTINs (own or clients') | GSTIN dashboard with status; review queue; export | Month-end for 30 GSTINs in hours, not weeks |
+| **Collaborator** | Invited by GSTIN owner to help with filing | Review queue, reconciliation report | No retyping; unmatched ITC list is actionable |
 
 ---
 
@@ -88,10 +88,10 @@
 
 | Phase | Features | Acceptance criteria (phase exit) |
 |---|---|---|
-| **0 — Skeleton** | Repo + CI; PG/Redis/MinIO up; auth (OTP dev=email, JWT, TOTP for CA); full v2 data model migrations; both login shells | Client + CA-firm member can register/login; TOTP enforced for firm members; migrations run clean both ways; CI green |
-| **1 — Capture & correlation** | Upload (scan+photo branches) → extraction pipeline → review → confirm; linking flows A+B; GSTIN search; bulk CSV onboarding; dashboards; sandbox IRP adapter; composition flag | E2E: photo-burst upload → auto/confirmed ledger; both linking flows work; 5-client CSV import with error report; sandbox IRN generated |
+| **0 — Skeleton** | Repo + CI; PG/Redis/MinIO up; auth (OTP dev=email, JWT, TOTP for CA); full v2 data model migrations; both login shells | User can register/login with email; migrations run clean both ways; CI green |
+| **1 — Capture & correlation** | Upload (scan+photo branches) → extraction pipeline → review → confirm; GSTIN access invite flow; bulk CSV onboarding; dashboards; sandbox IRP adapter; composition flag | E2E: photo-burst upload → auto/confirmed ledger; GSTIN invite flow works; 5-client CSV import with error report; sandbox IRN generated |
 | **2 — Returns engine** | GSTR-1 JSON (pinned schema + self-validator + doc_issue + nil returns); CDNR/CDNUR; GSTR-3B build; GSTR-2B import + ITC reconciliation; GSTR-1A; deadline engine | JSON passes pinned-schema contract test; ITC report matches a manual CA reconciliation on a test client; golden set G1 ≥0.90 / G2 ≥0.95 / G3 ≥0.99 |
-| **3 — Firm scale & compliance** | Multi-client dashboard; member permissions; audit UI; DPDP export/erasure; retention job; notifications (email + WhatsApp); CMP-08/GSTR-4 path | CA firm with 5 test businesses completes month-end < 30 min; DPDP export/erasure demo passes |
+| **3 — Firm scale & compliance** | Multi-GSTIN dashboard; access permissions; audit UI; DPDP export/erasure; retention job; notifications (email + WhatsApp); CMP-08/GSTR-4 path | User with 5 test GSTINs completes month-end < 30 min; DPDP export/erasure demo passes |
 | **4 — Direct filing** | GSP adapter (live filing + 2B auto-fetch); Live IRP (real GSTIN + credentials) | Sandbox GSP filing succeeds end-to-end |
 | **5 — Advanced** | Analytics; accounting-system import (Tally/Zoho books); buyer-side reconciliation | — |
 

@@ -38,7 +38,7 @@ CA uploads JSON on portal → file (DSC/EVC) → period locked
 Post-filing corrections → GSTR-1A delta records (locked data never edited)
 ```
 
-Roles: **Client** (business owner/clerk, may hold multiple GSTINs under one PAN) and **CA firm** (partners/CAs/clerks with granular permissions). GSTIN is the CA's search key per-registration; PAN is the entity key; mobile OTP identifies persons; a CA is never one person — it's a firm.
+Roles: Any **User** (business owner, CA, accountant, clerk — we don't distinguish) logs in with email, attaches one or more **GSTINs**, and files/uploads for those GSTINs. The GSTIN is the primary entity key. PAN is derived from GSTIN chars 3-12. Billing and access control is per-GSTIN.
 
 ---
 
@@ -47,18 +47,18 @@ Roles: **Client** (business owner/clerk, may hold multiple GSTINs under one PAN)
 ```
                 ┌─────────────────────────────────┐
                 │  Next.js Web App :9094           │
-                │  Client shell │ CA-firm shell    │
-                │  (one codebase, role-based)      │
+                │  Unified GSTIN Dashboard         │
+                │  (single shell, GSTIN-centric)      │
                 └───────────────┬─────────────────┘
                                 │ HTTPS + JWT (+TOTP for CA)
                 ┌───────────────▼─────────────────────────────┐
                 │  FastAPI Backend :8084                        │
                 │  ┌──────────┐ ┌───────────┐ ┌────────────┐ │
                 │  │ core      │ │ documents │ │ extraction │ │
-                │  │ auth/OTP  │ │ upload/   │ │ worker:    │ │
-                │  │ firms/    │ │ MinIO/    │ │ preprocess │ │
-                │  │ linking/  │ │ jobs      │ │ OCR→LLM→   │ │
-                │  │ consent/  │ │           │ │ validate   │ │
+                │  │ auth/     │ │ upload/   │ │ worker:    │ │
+                │  │ users/    │ │ MinIO/    │ │ preprocess │ │
+                │  │ gst_accs/ │ │ jobs      │ │ OCR→LLM→   │ │
+                │  │ access/   │ │           │ │ validate   │ │
                 │  │ audit     │ └───────────┘ └────────────┘ │
                 │  ┌──────────┐ ┌───────────┐ ┌────────────┐ │
                 │  │ gst       │ │ returns   │ │ itc        │ │
@@ -92,44 +92,43 @@ Phase 4: GSP adapter → GSTN · IRP adapter → NIC (sandbox in Phase 1)
 
 ## 3. Data model (v2 model carried forward, unchanged in shape)
 
-### `core` schema
+### `core` schema (v4.0 — unified GSTIN-first model)
+
+> **Architecture change (v4.0):** The dual-hierarchy model (CA firms vs. business owners with linking flows) has been replaced by a unified GSTIN-centric model. Users log in with email, attach one or more GSTINs, and all operations are keyed directly to the GSTIN. We don't care if the user is a business owner or a CA — the GSTIN is the billing and filing unit.
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `users` | id (UUID PK), mobile (unique), email (unique, nullable), password_hash (nullable), full_name, mobile_verified_at, totp_secret, totp_enabled_at | Person ≠ business; TOTP mandatory before joining a firm |
-| `ca_firms` | id, firm_name, ca_code (unique), pan, gstin (nullable) | The client-facing + liability unit |
-| `ca_firm_members` | firm_id, user_id, role (PARTNER/CA/CLERK), can_export, can_revoke, can_invite_members, joined_at | Granular permissions; audit logs the *member* |
-| `businesses` | id, pan (unique, validated), legal_name, trade_name, created_by | PAN = legal entity key; NEVER invent PANs/GSTINs |
-| `gst_registrations` | id, business_id FK, gstin (unique, regex+mod-36), state_code, filing_scheme (REGULAR_MONTHLY/QRMP/COMPOSITION), irn_applicable, aato_latest_minor, registered_address | Every filing object hangs off a registration |
-| `business_users` | business_id, user_id, role (OWNER/CLERK) | Client-side staff only |
-| `ca_client_links` | id, ca_firm_id, business_id, status (PENDING/ACTIVE/REJECTED/REVOKED), initiated_by (FIRM_REQUEST/CLIENT_INVITE), invite_code, consent_record_id, timestamps | One active row per (firm, business); covers ALL registrations |
-| `consent_records` | id, principal_user_id, fiduciary_type, purpose, consent_text_version, granted_at, withdrawn_at | DPDP: versioned, withdrawable |
-| `audit_logs` | id, actor_user_id, ca_firm_id, business_id, registration_id, action, entity, entity_id, payload_diff (JSONB), at | Every CA view/export logged |
+| `users` | id (UUID PK), email (unique, NOT NULL — primary login), mobile (unique, nullable), password_hash (nullable), full_name, created_at | Person identity; email is the login credential |
+| `gst_accounts` | gstin (String(15) PK, mod-36 validated), pan (derived from gstin[2:12]), legal_name, trade_name (nullable), state_code (2 chars), filing_scheme (REGULAR_MONTHLY/QRMP/COMPOSITION), irn_applicable (bool), aato_latest_minor (bigint), registered_address (nullable), created_at | **Primary entity = GSTIN**. Every filing object, document, and invoice hangs off a GSTIN directly. PAN is extracted from GSTIN chars 3-12, not stored independently |
+| `user_gst_access` | id (UUID PK), user_id FK→users, gstin FK→gst_accounts, role (ADMIN/FILER/VIEWER), granted_at | Links users to GSTINs they can operate on. ADMIN can invite others, FILER can upload/file, VIEWER is read-only |
+| `audit_logs` | id, actor_user_id, gstin (nullable), action, entity, entity_id, payload_diff (JSONB), at | Every data access logged; gstin replaces business_id/ca_firm_id |
+
+**Removed tables (v4.0):** `ca_firms`, `ca_firm_members`, `businesses`, `business_users`, `ca_client_links`, `consent_records` — all replaced by the simpler `user_gst_access` join table.
 
 ### `extraction` schema
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `documents` | id, registration_id, fp, capture_source (PDF_SCAN/DIGITAL/PHOTO/WHATSAPP), doc_type, minio_key, sha256, bytes, page_count, uploaded_by, uploaded_at | Immutable; sha256 dedupe; `capture_source` routes preprocessing |
+| `documents` | id, gstin FK→gst_accounts, fp, capture_source (PDF_SCAN/DIGITAL/PHOTO/WHATSAPP), doc_type, minio_key, sha256, bytes, page_count, uploaded_by, uploaded_at | Immutable; sha256 dedupe; `capture_source` routes preprocessing; scoped directly by GSTIN |
 | `extraction_jobs` | id, document_id, status (QUEUED/PREPROCESS/OCR_RUNNING/LLM_RUNNING/EXTRACTED/FAILED/NEEDS_REVIEW/CONFIRMED), preproc_report (JSONB), ocr_text_ref, raw_llm_output (JSONB), llm_model, llm_tokens_in/out, confidence_avg, error, timestamps | Durable truth; Redis holds job IDs only |
-| `invoice_drafts` | id, extraction_job_id, registration_id, fp, payload (JSONB), field_confidence (JSONB) | LLM output pre-confirmation; never mixes with ledger |
+| `invoice_drafts` | id, extraction_job_id, gstin FK→gst_accounts, fp, payload (JSONB), field_confidence (JSONB) | LLM output pre-confirmation; never mixes with ledger |
 
 ### `gst` schema
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `document_series` | id, registration_id, doc_type (INV/CDN/DBN), series_code, fy, current_number | Feeds doc_issue ranges |
-| `invoices` | id, registration_id, fp, direction (SALES/PURCHASE), supplier_gstin, buyer_gstin, invoice_no, series, invoice_date, place_of_supply, supply_type (INTRA/INTER), rchrg, inv_typ (R/SEWP/SEWOP/DE), export_pay_type (WPAY/WOPAY), shipping_bill_no, port_code, total_value_minor (paise), source_doc_id, status (DRAFT/CONFIRMED/LOCKED), confirmed_by, confirmed_at | LOCKED once period filed; corrections via GSTR-1A. Column named `export_pay_type` (WPAY/WOPAY = payment terms) — distinct from `gstr1_exports.export_type` (ORIGINAL/AMENDMENT) |
+| `document_series` | id, gstin FK→gst_accounts, doc_type (INV/CDN/DBN), series_code, fy, current_number | Feeds doc_issue ranges |
+| `invoices` | id, gstin FK→gst_accounts, fp, direction (SALES/PURCHASE), supplier_gstin, buyer_gstin, invoice_no, series, invoice_date, place_of_supply, supply_type (INTRA/INTER), rchrg, inv_typ (R/SEWP/SEWOP/DE), export_pay_type (WPAY/WOPAY), shipping_bill_no, port_code, total_value_minor (paise), source_doc_id, status (DRAFT/CONFIRMED/LOCKED), confirmed_by, confirmed_at | LOCKED once period filed; corrections via GSTR-1A. Column named `export_pay_type` (WPAY/WOPAY = payment terms) — distinct from `gstr1_exports.export_type` (ORIGINAL/AMENDMENT) |
 | `invoice_lines` | id, invoice_id, line_no, description, hsn_sac, uqc, qty, unit_price_minor, gst_rate, taxable_value_minor, cgst/sgst/igst/cess_minor | Tax always recomputed server-side |
-| `credit_debit_notes` | id, registration_id, fp, note_type (CDN/DBN), reason_code, source_invoice_id, buyer_gstin, party_name, taxable_value_minor, tax fields, series, note_no, note_date, status, irn | First-class entity → CDNR/CDNUR |
-| `filing_periods` | registration_id, fp, scheme_snapshot, status (OPEN/READY_FOR_FILING/FILED), gstr1_due_date, gstr3b_due_date, iff_eligible, nil_return, locked_at, filed_at, filed_by | Deadline engine drives reminders |
-| `gstr1_exports` | id, registration_id, fp, generated_by, json_minio_key, invoice_count, totals (JSONB), schema_version, export_type (ORIGINAL/AMENDMENT), generated_at | Versioned + immutable |
+| `credit_debit_notes` | id, gstin FK→gst_accounts, fp, note_type (CDN/DBN), reason_code, source_invoice_id, buyer_gstin, party_name, taxable_value_minor, tax fields, series, note_no, note_date, status, irn | First-class entity → CDNR/CDNUR |
+| `filing_periods` | gstin FK→gst_accounts, fp, scheme_snapshot, status (OPEN/READY_FOR_FILING/FILED), gstr1_due_date, gstr3b_due_date, iff_eligible, nil_return, locked_at, filed_at, filed_by | Deadline engine drives reminders |
+| `gstr1_exports` | id, gstin FK→gst_accounts, fp, generated_by, json_minio_key, invoice_count, totals (JSONB), schema_version, export_type (ORIGINAL/AMENDMENT), generated_at | Versioned + immutable |
 | `gstr1a_amendments` | id, target_export_id, invoice_id/cdn_id, field_deltas (JSONB), reason, status (DRAFT/CONFIRMED/EXPORTED), timestamps | Delta records; originals never edited |
 | `e_invoices` | id, invoice_id, irn, ack_no, ack_date, signed_qr_base64, cancelled_at, cancel_window_until | IRN path storage |
-| `gstr3b_exports` | id, registration_id, fp, auto_payload (JSONB), manual_overrides (JSONB, restricted), generated_by, generated_at | Outward locked per Jul-2025; overrides only ITC tables |
-| `gstr2b_statements` | id, registration_id, fp, source (PORTAL_UPLOAD/GSP_API), raw_minio_key, downloaded_at, imported_by | Portal 2B JSON until GSP fetch |
+| `gstr3b_exports` | id, gstin FK→gst_accounts, fp, auto_payload (JSONB), manual_overrides (JSONB, restricted), generated_by, generated_at | Outward locked per Jul-2025; overrides only ITC tables |
+| `gstr2b_statements` | id, gstin FK→gst_accounts, fp, source (PORTAL_UPLOAD/GSP_API), raw_minio_key, downloaded_at, imported_by | Portal 2B JSON until GSP fetch |
 | `gstr2b_entries` | id, statement_id, supplier_gstin, invoice_no, invoice_date, taxable_value_minor, tax fields, itc_eligible, doc_type | Parsed 2B rows |
-| `itc_reconciliation` | id, registration_id, fp, purchase_invoice_id, gstr2b_entry_id, match_status (MATCHED/PROBABLE/UNMATCHED/MISSING_IN_2B/MISSING_IN_BOOKS), confidence, remarks | The report CAs pay for |
+| `itc_reconciliation` | id, gstin FK→gst_accounts, fp, purchase_invoice_id, gstr2b_entry_id, match_status (MATCHED/PROBABLE/UNMATCHED/MISSING_IN_2B/MISSING_IN_BOOKS), confidence, remarks | The report CAs pay for |
 | `notifications` | id, user_id, business_id, type, payload (JSONB), read_at, created_at | In-app store |
 
 **Legal engine (drives deadline + lock logic):** GSTR-1 due 11th monthly / 13th QRMP; IFF 13th months 1–2; 3B 20th monthly / 22nd-24th QRMP by state category; 2B on 14th; CMP-08 18th quarterly; GSTR-4 30 Apr; late fee ₹50/day (₹20 nil) cap ₹10k; GSTR-1A before that period's 3B; 3B outward auto-populated + LOCKED (Jul-2025).
@@ -143,7 +142,7 @@ D:/gst_filing_app/
 ├── docs/                          # 8 canonical docs (see README.md)
 ├── backend/
 │   ├── app/
-│   │   ├── core/                  # auth (OTP/JWT/TOTP), users, firms, businesses,
+│   │   ├── core/                  # auth (email OTP/password), users, gst_accounts,
 │   │   │                          # registrations, linking, consent, audit, notify
 │   │   ├── documents/            # upload API, MinIO client, job orchestration
 │   │   ├── extraction/           # worker: preprocess (scan/photo branches), OCR,
@@ -179,7 +178,7 @@ D:/gst_filing_app/
 
 | Flow | Summary | Full detail |
 |---|---|---|
-| CA↔client linking (both flows, consent) | Firm requests by GSTIN / client invites by code; accept activates firm-wide access to all registrations; revocable; DPDP consent recorded | PRD §4.2 |
+| GSTIN access management | Owner invites collaborator by email with role (ADMIN/FILER/VIEWER); instant revocation; audit logged | PRD §4.2 |
 | Upload → extract → review → confirm | Photo branch preprocessing, OCR→LLM→validate, auto-confirm only when every mandatory field ≥ source threshold (scan 0.90 / photo-WhatsApp 0.97), else review | EXTRACTION_SPEC.md |
 | Return prep dual-pipeline | JSON path vs IRN path by `irn_applicable`; guard: 0 pending reviews; self-validator before handover; nil-return auto-detect | PRD §4.4 |
 | 3B + ITC | Outward auto-build (locked rule), 2B import, 5-status reconciliation, ITC prefill | PRD §4.4 |
@@ -208,3 +207,4 @@ D:/gst_filing_app/
 | v1.0 | 2026-09-26 | Initial Java/Flutter baseline |
 | v2.0 | 2026-09-26 | All 18 review findings folded in (multi-GSTIN businesses, CA firms, 3B/ITC first-class, DPDP, etc.) |
 | v3.0 | 2026-09-26 | **AI-first stack**: Python/FastAPI backend (extraction folded in), Next.js/TS frontend; Java/Flutter retired; GstCalculator port to Python gated by Java-reference test vectors; IRP port deferred w/ escape hatch |
+| v4.0 | 2026-10-02 | **Unified GSTIN-first model**: removed CA firms, businesses, business_users, ca_client_links, consent_records. GSTIN is the primary key. Users attach GSTINs via user_gst_access. Email is the login credential. Single unified web shell. |

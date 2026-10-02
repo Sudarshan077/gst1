@@ -83,8 +83,17 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 # --- auth fixtures (defined in auth_helpers.py; exposed via conftest) ---------
 # Fixture re-exports are intentionally "unused" here — pytest discovers them
 # through conftest's namespace, so the F401 must be silenced explicitly.
-from tests import auth_helpers as _auth_helpers  # noqa: E402, F401
+#
+# auth_helpers imports app.main, whose v2-era routers (business/firm/links)
+# are mid-v4 migration (out of task 0.3 scope). Guard the import so the
+# 0.3 verification tests (migrations/models) collect and run even while the
+# router layer still references removed v2 classes; auth tests then fail on
+# their own merits instead of crashing collection for the whole suite.
+try:
+    from tests import auth_helpers as _auth_helpers  # noqa: E402, F401
 
-api_sessionmaker = _auth_helpers.api_sessionmaker
-client = _auth_helpers.client
-fake_redis = _auth_helpers.fake_redis
+    api_sessionmaker = _auth_helpers.api_sessionmaker
+    client = _auth_helpers.client
+    fake_redis = _auth_helpers.fake_redis
+except ImportError:  # pragma: no cover — v4 router migration in progress
+    _auth_helpers = None  # type: ignore[assignment]

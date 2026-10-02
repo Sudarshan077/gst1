@@ -17,7 +17,7 @@
 | IDs | UUIDs (except `doc_id`-style human keys in extraction fixtures only) |
 | Pagination | `?page=0&size=20` → `{"content": […], "page": 0, "size": 20, "totalElements": N, "last": bool}` |
 | Errors | 401 unauthenticated · 403 unauthorized · 404 not-found-or-no-access (never leak existence) · 422 validation · 409 conflict · 423 locked period |
-| Access guard | every business/registration-scoped route passes `require_business_access` (SECURITY §2) |
+| Access guard | every GSTIN-scoped route passes `require_gstin_access` (SECURITY §2) |
 
 ---
 
@@ -31,62 +31,42 @@
 | POST | `/auth/stepup` | (JWT) + `{otp}` | `{stepup_token}` | 15-min step-up proof for sensitive routes |
 | POST | `/auth/totp/setup` | (JWT) | `{secret, qr_uri}` | client-side verify before enabling |
 | POST | `/auth/totp/verify` | (JWT) + `{code}` | `{enabled: true}` | mandatory before firm join |
-| GET | `/auth/me` | (JWT) | `{user, businesses?, firm?}` | role-resolved profile |
+| GET | `/auth/me` | (JWT) | `{user, gst_accounts: [{gstin, role, legal_name}]}` | returns user and all accessible GSTINs with roles |
 
-## 2. Users & businesses — `/users`, `/businesses`
+## 2. Users & GST Accounts — `/users`, `/gst-accounts`
 
 | Method | Path | Notes |
 |---|---|---|
 | GET/PATCH | `/users/me` | profile update |
-| POST | `/businesses` | `{legal_name, pan, trade_name?}` — PAN validated |
-| GET | `/businesses` | my businesses (via business_users) |
-| GET | `/businesses/{id}` | detail incl. registrations |
-| POST | `/businesses/{id}/registrations` | `{gstin, registered_address?, aato_minor? (paise, int)}` — full GSTIN validation + PAN==GSTIN[2..12]; sets `filing_scheme`, `irn_applicable` |
-| GET/PATCH | `/registrations/{regId}` | incl. scheme/irn flags |
-| GET | `/registrations/{regId}/periods?fy=` | filing_periods with due dates + status |
-| GET | `/registrations/{regId}/months/{fp}/summary` | month card data: doc counts, ledger totals, deadline, nil flag |
+| POST | `/gst-accounts` | `{gstin, legal_name, trade_name?, registered_address?, aato_minor?}` — full GSTIN validation (mod-36 + PAN extraction from chars 3-12); sets `filing_scheme`, `irn_applicable`; creator becomes ADMIN |
+| GET | `/gst-accounts` | my GSTINs (via user_gst_access) with role |
+| GET | `/gst-accounts/{gstin}` | detail incl. scheme/irn flags |
+| PATCH | `/gst-accounts/{gstin}` | update trade_name, address, aato, scheme |
+| GET | `/gst-accounts/{gstin}/periods?fy=` | filing_periods with due dates + status |
+| GET | `/gst-accounts/{gstin}/months/{fp}/summary` | month card data: doc counts, ledger totals, deadline, nil flag |
+| POST | `/gst-accounts/{gstin}/collaborators` | `{email, role: ADMIN/FILER/VIEWER}` — invite another user to this GSTIN |
+| GET | `/gst-accounts/{gstin}/collaborators` | list users with access |
+| DELETE | `/gst-accounts/{gstin}/collaborators/{userId}` | revoke access (ADMIN only); audit logged |
 
-## 3. CA firms — `/firm`
+## 3. (Removed) CA firms & Client-side linking
 
-| Method | Path | Notes |
-|---|---|---|
-| POST | `/firm` | `{firm_name, pan}` — creates firm + PARTNER membership; requires TOTP enabled |
-| GET | `/firm` | my firm + members |
-| POST | `/firm/members/invite` | step-up; invite email/mobile |
-| POST | `/firm/members/{inviteId}/accept` | (JWT of invitee, TOTP verified) |
-| PATCH | `/firm/members/{userId}` | step-up; roles/permissions |
-| GET | `/firm/clients?query=&status=` | roster: businesses linked to firm; GSTIN prefix + name search |
-| POST | `/firm/clients/request` | `{gstin}` → PENDING link (Flow A); reveals NO business data |
-| POST | `/firm/clients/redeem` | `{invite_code}` → ACTIVE link (Flow B) |
-| POST | `/firm/clients/{businessId}/revoke` | step-up; firm-side revoke |
-| POST | `/firm/import/dry-run` | CSV upload → per-row validation report, nothing committed |
-| POST | `/firm/import/commit` | step-up; batch create + invite codes |
-
-## 4. Client-side linking — `/links`
-
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/links` | my incoming firm requests + active links (firm name, status, consent version) |
-| POST | `/links/invite-code` | generate code for a business (7-day, single-use) |
-| POST | `/links/{linkId}/accept` | consent record created with version |
-| POST | `/links/{linkId}/reject` | |
-| POST | `/links/{linkId}/revoke` | step-up; instant access death |
+> **v4.0:** Sections 3 and 4 (CA firms, client-side linking) have been removed. GSTIN access management is now handled via `/gst-accounts/{gstin}/collaborators` endpoints in Section 2.
 
 ## 5. Documents & extraction — `/documents`
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/registrations/{regId}/months/{fp}/documents` | multipart; ≤25 MB/file; multi-file photo burst → one document; magic-byte check; sha256; capture_source param |
-| GET | `/registrations/{regId}/months/{fp}/documents` | list + job status per doc |
+| POST | `/gst-accounts/{gstin}/months/{fp}/documents` | multipart; ≤25 MB/file; multi-file photo burst → one document; magic-byte check; sha256; capture_source param |
+| GET | `/gst-accounts/{gstin}/months/{fp}/documents` | list + job status per doc |
 | GET | `/documents/{docId}` | detail: statuses, preproc_report, confidence summary |
 | GET | `/documents/{docId}/image?page=` | presigned URL (30 min) |
-| GET | `/registrations/{regId}/months/{fp}/review-queue` | NEEDS_REVIEW docs, confidence-ascending |
+| GET | `/gst-accounts/{gstin}/months/{fp}/review-queue` | NEEDS_REVIEW docs, confidence-ascending |
 | GET | `/documents/{docId}/draft` | draft fields + per-field confidence |
 | PUT | `/documents/{docId}/draft` | edit fields → server validator re-runs |
 | POST | `/documents/{docId}/confirm` | draft → invoices/invoice_lines; rejects if validator dirty |
 | POST | `/documents/{docId}/reject` | failed-extraction path (e.g., blurry photo) |
 
-## 6. Invoice ledger — `/registrations/{regId}/…`
+## 6. Invoice ledger — `/gst-accounts/{gstin}/…`
 
 | Method | Path | Notes |
 |---|---|---|
@@ -102,15 +82,15 @@
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/registrations/{regId}/months/{fp}/gstr1/prepare` | guard: 0 pending reviews; dual-path by irn_applicable; returns section summary + validation errors |
-| POST | `/registrations/{regId}/months/{fp}/gstr1/generate` | step-up; writes export record + MinIO JSON; 422 if validator errors |
-| GET | `/registrations/{regId}/months/{fp}/gstr1/exports` | history (immutable) |
+| POST | `/gst-accounts/{gstin}/months/{fp}/gstr1/prepare` | guard: 0 pending reviews; dual-path by irn_applicable; returns section summary + validation errors |
+| POST | `/gst-accounts/{gstin}/months/{fp}/gstr1/generate` | step-up; writes export record + MinIO JSON; 422 if validator errors |
+| GET | `/gst-accounts/{gstin}/months/{fp}/gstr1/exports` | history (immutable) |
 | GET | `/exports/{exportId}/download` | step-up; presigned JSON URL |
-| POST | `/registrations/{regId}/months/{fp}/gstr1/nil` | nil-return JSON |
-| POST | `/registrations/{regId}/months/{fp}/gstr1a` | amendment delta (post-FILED only) |
-| POST | `/registrations/{regId}/months/{fp}/gstr3b/prepare` | outward auto-build + ITC prefill |
-| POST | `/registrations/{regId}/months/{fp}/gstr3b/generate` | step-up |
-| POST | `/registrations/{regId}/months/{fp}/filed` | marks FILED → locks period (423 on any later mutation) |
+| POST | `/gst-accounts/{gstin}/months/{fp}/gstr1/nil` | nil-return JSON |
+| POST | `/gst-accounts/{gstin}/months/{fp}/gstr1a` | amendment delta (post-FILED only) |
+| POST | `/gst-accounts/{gstin}/months/{fp}/gstr3b/prepare` | outward auto-build + ITC prefill |
+| POST | `/gst-accounts/{gstin}/months/{fp}/gstr3b/generate` | step-up |
+| POST | `/gst-accounts/{gstin}/months/{fp}/filed` | marks FILED → locks period (423 on any later mutation) |
 
 ## 8. e-Invoicing (IRN path) — `/einvoice`
 
@@ -118,16 +98,16 @@
 |---|---|---|
 | POST | `/invoices/{invId}/irn` | sandbox adapter (dev) / live (gated); idempotent; stores e_invoices row |
 | POST | `/einvoices/{irnId}/cancel` | within 24h window |
-| GET | `/registrations/{regId}/months/{fp}/einvoices` | IRN status board |
+| GET | `/gst-accounts/{gstin}/months/{fp}/einvoices` | IRN status board |
 
 ## 9. ITC — `/itc`
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/registrations/{regId}/months/{fp}/gstr2b/import` | portal 2B JSON upload → statement + entries |
-| GET | `/registrations/{regId}/months/{fp}/gstr2b` | imported statements |
-| POST | `/registrations/{regId}/months/{fp}/itc/reconcile` | runs engine → 5-status rows |
-| GET | `/registrations/{regId}/months/{fp}/itc/report?status=` | reconciliation report |
+| POST | `/gst-accounts/{gstin}/months/{fp}/gstr2b/import` | portal 2B JSON upload → statement + entries |
+| GET | `/gst-accounts/{gstin}/months/{fp}/gstr2b` | imported statements |
+| POST | `/gst-accounts/{gstin}/months/{fp}/itc/reconcile` | runs engine → 5-status rows |
+| GET | `/gst-accounts/{gstin}/months/{fp}/itc/report?status=` | reconciliation report |
 
 ## 10. DPDP data-principal rights — `/me/data`
 
@@ -151,7 +131,7 @@
 
 | # | Rule |
 |---|---|
-| 1 | Every registration-scoped route resolves access through the guard dependency — no exceptions, no inline checks |
+| 1 | Every GSTIN-scoped route resolves access through `require_gstin_access` — no exceptions, no inline checks |
 | 2 | 404 over 403 for other-tenant resources (existence is data) |
 | 3 | Paise ints in, paise ints out — no float ever crosses the boundary |
 | 4 | Responses match this doc's shapes; Pydantic models in `app/api/schemas.py` are the compiled contract, and the frontend types are generated from them |

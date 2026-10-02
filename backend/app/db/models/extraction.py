@@ -1,6 +1,6 @@
 """extraction schema: documents, extraction jobs, invoice drafts.
 
-Table shapes follow TECHNICAL_ARCHITECTURE.md §3 (`extraction` schema) verbatim.
+Table shapes follow TECHNICAL_ARCHITECTURE.md §3 (v4.0 unified GSTIN-first) verbatim.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ EXTRACTION_SCHEMA = "extraction"
 
 
 class CaptureSource(enum.StrEnum):
-    """`capture_source` routes preprocessing (scan vs photo/digital branch)."""
+    """capture_source routes preprocessing (scan vs photo/digital branch)."""
 
     PDF_SCAN = "PDF_SCAN"
     DIGITAL = "DIGITAL"
@@ -54,11 +54,11 @@ class JobStatus(enum.StrEnum):
 
 
 class Document(Base):
-    """Immutable; sha256 dedupe."""
+    """Immutable; sha256 dedupe; scoped directly by GSTIN."""
 
     __tablename__ = "documents"
     __table_args__ = (
-        Index("ix_documents_reg_fp", "registration_id", "fp"),
+        Index("ix_documents_gstin_fp", "gstin", "fp"),
         Index("ix_documents_sha256", "sha256"),
         {"schema": EXTRACTION_SCHEMA},
     )
@@ -66,10 +66,10 @@ class Document(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"), nullable=False
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(f"{CORE_SCHEMA}.gst_accounts.gstin"), nullable=False
     )
-    fp: Mapped[str] = mapped_column(String(6), nullable=False)  # MMYYYY
+    fp: Mapped[str] = mapped_column(String(6), nullable=False)
     capture_source: Mapped[CaptureSource] = mapped_column(
         Enum(CaptureSource, name="capture_source", schema=EXTRACTION_SCHEMA),
         nullable=False,
@@ -141,8 +141,8 @@ class InvoiceDraft(Base):
         ForeignKey(f"{EXTRACTION_SCHEMA}.extraction_jobs.id"),
         nullable=False,
     )
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"), nullable=False
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(f"{CORE_SCHEMA}.gst_accounts.gstin"), nullable=False
     )
     fp: Mapped[str] = mapped_column(String(6), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)

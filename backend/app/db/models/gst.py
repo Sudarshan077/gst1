@@ -1,7 +1,9 @@
 """gst schema: series, invoices, CDNs, periods, exports, amendments, e-invoices,
 3B, 2B, ITC recon, notifications.
 
-Table shapes follow TECHNICAL_ARCHITECTURE.md §3 (`gst` schema) verbatim.
+Table shapes follow TECHNICAL_ARCHITECTURE.md §3 v4.0 (unified GSTIN-first)
+verbatim: every registration-scoped table keys off `gstin` (String(15) FK to
+core.gst_accounts.gstin), never off a surrogate registration UUID.
 Money columns are integer minor units (paise) — no float ever.
 """
 
@@ -14,8 +16,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.db.base import Base
-from app.db.models.core import CORE_SCHEMA, GstRegistration
-from app.db.models.extraction import EXTRACTION_SCHEMA, Document
+from app.db.models.core import CORE_SCHEMA, GstAccount
 from sqlalchemy import (
     Boolean,
     Date,
@@ -35,6 +36,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 GST_SCHEMA = "gst"
+
+_GSTIN_FK = f"{CORE_SCHEMA}.gst_accounts.gstin"
 
 
 class InvoiceDirection(enum.StrEnum):
@@ -144,8 +147,8 @@ class DocumentSeries(Base):
     __tablename__ = "document_series"
     __table_args__ = (
         UniqueConstraint(
-            "registration_id", "doc_type", "series_code", "fy",
-            name="uq_document_series_reg_type_code_fy",
+            "gstin", "doc_type", "series_code", "fy",
+            name="uq_document_series_gstin_type_code_fy",
         ),
         {"schema": GST_SCHEMA},
     )
@@ -153,8 +156,8 @@ class DocumentSeries(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"), nullable=False
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(_GSTIN_FK), nullable=False
     )
     doc_type: Mapped[SeriesDocType] = mapped_column(
         Enum(SeriesDocType, name="series_doc_type", schema=GST_SCHEMA), nullable=False
@@ -169,10 +172,10 @@ class Invoice(Base):
 
     __tablename__ = "invoices"
     __table_args__ = (
-        Index("ix_invoices_reg_fp", "registration_id", "fp"),
+        Index("ix_invoices_gstin_fp", "gstin", "fp"),
         UniqueConstraint(
-            "registration_id", "fp", "invoice_no",
-            name="uq_invoices_reg_fp_no",
+            "gstin", "fp", "invoice_no",
+            name="uq_invoices_gstin_fp_no",
         ),
         {"schema": GST_SCHEMA},
     )
@@ -180,8 +183,8 @@ class Invoice(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"), nullable=False
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(_GSTIN_FK), nullable=False
     )
     fp: Mapped[str] = mapped_column(String(6), nullable=False)  # MMYYYY
     direction: Mapped[InvoiceDirection] = mapped_column(
@@ -210,7 +213,7 @@ class Invoice(Base):
     port_code: Mapped[str | None] = mapped_column(String(10))
     total_value_minor: Mapped[int] = mapped_column(Integer, nullable=False)
     source_doc_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(), ForeignKey(f"{EXTRACTION_SCHEMA}.documents.id")
+        Uuid(), ForeignKey("extraction.documents.id")
     )
     status: Mapped[InvoiceStatus] = mapped_column(
         Enum(InvoiceStatus, name="invoice_status", schema=GST_SCHEMA),
@@ -269,15 +272,18 @@ class CreditDebitNote(Base):
 
     __tablename__ = "credit_debit_notes"
     __table_args__ = (
-        Index("ix_credit_debit_notes_reg_fp", "registration_id", "fp"),
+        Index("ix_credit_debit_notes_gstin_fp", "gstin", "fp"),
+        UniqueConstraint(
+            "gstin", "fp", "note_no", name="uq_credit_debit_notes_gstin_fp_no"
+        ),
         {"schema": GST_SCHEMA},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"), nullable=False
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(_GSTIN_FK), nullable=False
     )
     fp: Mapped[str] = mapped_column(String(6), nullable=False)
     note_type: Mapped[NoteType] = mapped_column(
@@ -309,15 +315,13 @@ class CreditDebitNote(Base):
 
 
 class FilingPeriod(Base):
-    """Deadline engine drives reminders; composite PK (registration, fp)."""
+    """Deadline engine drives reminders; composite PK (gstin, fp)."""
 
     __tablename__ = "filing_periods"
     __table_args__ = {"schema": GST_SCHEMA}
 
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(),
-        ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"),
-        primary_key=True,
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(_GSTIN_FK), primary_key=True
     )
     fp: Mapped[str] = mapped_column(String(6), primary_key=True)  # MMYYYY
     scheme_snapshot: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -336,7 +340,7 @@ class FilingPeriod(Base):
         Uuid(), ForeignKey(f"{CORE_SCHEMA}.users.id")
     )
 
-    registration: Mapped[GstRegistration] = relationship()
+    gst_account: Mapped[GstAccount] = relationship()
 
 
 class Gstr1Export(Base):
@@ -344,15 +348,15 @@ class Gstr1Export(Base):
 
     __tablename__ = "gstr1_exports"
     __table_args__ = (
-        Index("ix_gstr1_exports_reg_fp", "registration_id", "fp"),
+        Index("ix_gstr1_exports_gstin_fp", "gstin", "fp"),
         {"schema": GST_SCHEMA},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"), nullable=False
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(_GSTIN_FK), nullable=False
     )
     fp: Mapped[str] = mapped_column(String(6), nullable=False)
     generated_by: Mapped[uuid.UUID | None] = mapped_column(
@@ -434,7 +438,7 @@ class Gstr3bExport(Base):
     __tablename__ = "gstr3b_exports"
     __table_args__ = (
         UniqueConstraint(
-            "registration_id", "fp", name="uq_gstr3b_exports_reg_fp"
+            "gstin", "fp", name="uq_gstr3b_exports_gstin_fp"
         ),
         {"schema": GST_SCHEMA},
     )
@@ -442,8 +446,8 @@ class Gstr3bExport(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"), nullable=False
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(_GSTIN_FK), nullable=False
     )
     fp: Mapped[str] = mapped_column(String(6), nullable=False)
     auto_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
@@ -462,7 +466,7 @@ class Gstr2bStatement(Base):
     __tablename__ = "gstr2b_statements"
     __table_args__ = (
         UniqueConstraint(
-            "registration_id", "fp", name="uq_gstr2b_statements_reg_fp"
+            "gstin", "fp", name="uq_gstr2b_statements_gstin_fp"
         ),
         {"schema": GST_SCHEMA},
     )
@@ -470,8 +474,8 @@ class Gstr2bStatement(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"), nullable=False
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(_GSTIN_FK), nullable=False
     )
     fp: Mapped[str] = mapped_column(String(6), nullable=False)
     source: Mapped[Gstr2bSource] = mapped_column(
@@ -518,15 +522,15 @@ class ItcReconciliation(Base):
 
     __tablename__ = "itc_reconciliation"
     __table_args__ = (
-        Index("ix_itc_reconciliation_reg_fp", "registration_id", "fp"),
+        Index("ix_itc_reconciliation_gstin_fp", "gstin", "fp"),
         {"schema": GST_SCHEMA},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    registration_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.gst_registrations.id"), nullable=False
+    gstin: Mapped[str] = mapped_column(
+        String(15), ForeignKey(_GSTIN_FK), nullable=False
     )
     fp: Mapped[str] = mapped_column(String(6), nullable=False)
     purchase_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -543,7 +547,7 @@ class ItcReconciliation(Base):
 
 
 class Notification(Base):
-    """In-app store."""
+    """In-app store; gstin-scoped in the v4 model (was business_id)."""
 
     __tablename__ = "notifications"
     __table_args__ = (
@@ -557,8 +561,8 @@ class Notification(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), ForeignKey(f"{CORE_SCHEMA}.users.id"), nullable=False
     )
-    business_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(), ForeignKey(f"{CORE_SCHEMA}.businesses.id")
+    gstin: Mapped[str | None] = mapped_column(
+        String(15), ForeignKey(_GSTIN_FK)
     )
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -566,8 +570,3 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-
-
-# Imported last so the name never shadows the class defined above; typing-only
-# use in annotations above is quoted so mypy resolves it lazily.
-_ = (Document,)  # documents relationship target (unused FK backref in v2 shape)

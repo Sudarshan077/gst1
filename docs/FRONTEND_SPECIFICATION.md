@@ -12,35 +12,27 @@
 frontend/
 ├── app/
 │   ├── (auth)/
-│   │   ├── login/page.tsx            # mobile OTP (both roles) + email dev-OTP
-│   │   ├── register/page.tsx         # role pick: business / CA firm
-│   │   └── totp/page.tsx             # QR + verify (CA firm onboarding)
-│   ├── (client)/
-│   │   ├── /                         # home: per-GSTIN month cards + deadlines
-│   │   ├── businesses/               # PAN-level business + GSTIN registrations CRUD
-│   │   ├── months/[gstinId]/[fp]/    # month workspace (upload + ledger + review)
+│   │   ├── login/page.tsx            # email OTP / password login
+│   │   └── register/page.tsx         # email signup
+│   ├── (dashboard)/
+│   │   ├── /                         # home: GSTIN switcher + per-GSTIN month cards + deadlines
+│   │   ├── gst-accounts/             # GSTIN management (add GSTIN, collaborators)
+│   │   ├── [gstin]/months/[fp]/      # month workspace (upload + ledger + review)
+│   │   ├── [gstin]/returns/[fp]/     # GSTR-1/3B return prep, export history, amendments
+│   │   ├── [gstin]/itc/[fp]/         # 2B import + reconciliation report
 │   │   ├── review/[docId]/           # side-by-side extraction review
-│   │   ├── my-ca/                    # firm links: accept/reject/revoke + invites
-│   │   └── settings/                 # profile, DPDP export/erasure
-│   └── (ca)/
-│       ├── /                         # client roster: status grid + GSTIN search
-│       ├── clients/[businessId]/     # client detail (all registrations, months)
-│       ├── months/[gstinId]/[fp]/    # same month workspace + return prep
-│       ├── returns/[gstinId]/[fp]/   # GSTR-1/3B prep, export history, amendments
-│       ├── itc/[gstinId]/[fp]/       # 2B import + reconciliation report
-│       ├── import/                   # bulk CSV onboarding
-│       └── firm/                     # members, permissions, ca_code
+│   │   └── settings/                 # user profile, DPDP export/erasure
 ├── components/
 │   ├── ui/                           # shadcn/ui primitives
 │   ├── upload/                       # dropzone, photo-burst grouper, job status chips
 │   ├── review/                       # ExtractedField, ConfidenceBadge, DocImagePane
 │   ├── returns/                      # SectionTabs (B2B/B2CS/CDNR/...), ExportHistory
-│   └── shared/                       # DeadlineCountdown, StatusChip, GstinInput
+│   └── shared/                       # GstinSelector, DeadlineCountdown, StatusChip, GstinInput
 ├── lib/
 │   ├── api/                          # typed client (generated from Pydantic schema)
 │   ├── format/                       # paise→₹, Indian numbering, dates, fp labels
 │   └── validation/                   # GSTIN checksum (mirror), PAN regex
-└── middleware.ts                     # JWT check + role-based route guard
+└── middleware.ts                     # JWT auth check + session guard
 ```
 
 ## 2. Design tokens
@@ -57,7 +49,7 @@ Typography: Inter; tables dense (13px), dashboards 14px. Dark mode: shadcn defau
 
 ## 3. Key screens & states
 
-### 3.1 Month workspace `(client|ca)/months/[gstinId]/[fp]`
+### 3.1 Month workspace `[gstin]/months/[fp]`
 
 | State | Rendering |
 |---|---|
@@ -77,7 +69,7 @@ Typography: Inter; tables dense (13px), dashboards 14px. Dark mode: shadcn defau
 | Edit → save | Re-runs client-side GSTIN checksum; PUT draft; validator re-runs server-side; confirm button enabled only when clean |
 | Keyboard | Tab cycles amber fields first |
 
-### 3.3 CA roster `(ca)/`
+### 3.3 GSTIN Dashboard `/`
 
 | Element | Behavior |
 |---|---|
@@ -86,7 +78,7 @@ Typography: Inter; tables dense (13px), dashboards 14px. Dark mode: shadcn defau
 | Add client | GSTIN request flow (A); invite-code redeem (B); bulk CSV import link |
 | Row → detail | client detail with all registrations, active links, consent status |
 
-### 3.4 Return prep `(ca)/returns/[gstinId]/[fp]`
+### 3.4 Return prep `[gstin]/returns/[fp]`
 
 | Step UI | Behavior |
 |---|---|
@@ -95,7 +87,7 @@ Typography: Inter; tables dense (13px), dashboards 14px. Dark mode: shadcn defau
 | Export | Download button → step-up OTP; export history table (schema_version, totals, generated_by, AMENDMENT badge) |
 | Amendments | Post-filing corrections form → delta list → GSTR-1A export |
 
-### 3.5 ITC `(ca)/itc/[gstinId]/[fp]`
+### 3.5 ITC `[gstin]/itc/[fp]`
 
 2B upload → import progress → reconciliation table (5 status filters: MATCHED/PROBABLE/UNMATCHED/MISSING_IN_2B/MISSING_IN_BOOKS) → ITC summary prefill for 3B → "chase supplier" action list.
 
@@ -116,10 +108,10 @@ Typography: Inter; tables dense (13px), dashboards 14px. Dark mode: shadcn defau
 
 | Screen | Done when |
 |---|---|
-| Login/register/TOTP | Both roles onboard; TOTP enforced pre-firm-join; dev email OTP works |
+| Login/register | Email OTP/password signup & login works |
+| GSTIN Dashboard | Displays all accessible GSTINs, active periods, and deadlines |
 | Month workspace | Photo-burst upload → job chips through pipeline → review → confirmed totals update live |
 | Review | Amber fields editable, confirm blocked while dirty/invalid |
-| CA roster | GSTIN search; both linking flows; red flags correct |
 | Return prep | Guard blocks; JSON download only after validator passes; history immutable |
 | ITC | 2B import → 5-status report → 3B prefill |
 | DPDP | Self-service export downloads; erasure request flow completes |

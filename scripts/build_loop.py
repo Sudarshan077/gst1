@@ -38,6 +38,13 @@ import sys
 import time
 from datetime import datetime
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BUILD_DIR = os.path.join(ROOT, "build")
 PLAN_PATH = os.path.join(BUILD_DIR, "plan.json")
@@ -60,26 +67,22 @@ ROLES_PATH = os.path.join(BUILD_DIR, "role_models.json")
 # tester=best-reasoning. Keep the ollama-cloud and free routes as failover.
 ROLE_CHAINS = {
     "builder": [
-        ("auto/best-coding", "omniroute"),
-        ("openrouter/cohere/north-mini-code:free", "omniroute"),
-        ("auto/free", "omniroute"),
+        ("glm-5.3-flash", "ollama-cloud"),
+        ("glm-5.3", "ollama-cloud"),
     ],
     "tester": [
-        ("auto/best-reasoning", "omniroute"),
-        ("openrouter/nvidia/nemotron-3-super-120b-a12b:free", "omniroute"),
-        ("auto/free", "omniroute"),
+        ("deepseek-v4.1-flash", "ollama-cloud"),
+        ("glm-5.3", "ollama-cloud"),
     ],
     "monitor": [
         ("glm-5.3", "ollama-cloud"),
-        ("auto/best-reasoning", "omniroute"),
-        ("kimi-k3", "ollama-cloud"),
+        ("glm-5.3-flash", "ollama-cloud"),
     ],
 }
 
 # Builder-feedback / rework model chain (used to turn tester findings into a fix).
 FEEDBACK_CHAIN = [
-    ("auto/best-coding", "omniroute"),
-    ("openrouter/cohere/north-mini-code:free", "omniroute"),
+    ("glm-5.3", "ollama-cloud"),
 ]
 
 # Routes that currently answer with a LOCAL STUB rather than the real upstream:
@@ -105,9 +108,15 @@ PROBE_TIMEOUT = 180      # seconds allowed for one liveness probe
 
 def log(msg):
     line = f"[{datetime.now().isoformat(timespec='seconds')}] {msg}"
-    print(line, flush=True)
-    with open(LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(line + "\n")
+    try:
+        print(line, flush=True)
+    except Exception:
+        print(line.encode("ascii", errors="replace").decode("ascii"), flush=True)
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
 
 
 def load_json(path, default):
@@ -773,7 +782,7 @@ def main():
                     f"{slot['retries']}/{MAX_RETRIES}")
             else:
                 slot["status"] = "blocked"
-                state["escalations"].append({
+                state.setdefault("escalations", []).append({
                     "task": sid, "reason": "Monitor advanced on unproven evidence",
                     "ts": datetime.now().isoformat()})
                 state["status"] = "escalated"
@@ -799,7 +808,7 @@ def main():
                     f"instructed builder")
             else:
                 slot["status"] = "blocked"
-                state["escalations"].append({
+                state.setdefault("escalations", []).append({
                     "task": sid, "reason": "retries exhausted",
                     "ts": datetime.now().isoformat()})
                 state["status"] = "escalated"
@@ -808,7 +817,7 @@ def main():
                 break
         else:  # ESCALATE
             reason = parse_field(m_out, "REASON")
-            state["escalations"].append({"task": sid, "reason": reason,
+            state.setdefault("escalations", []).append({"task": sid, "reason": reason,
                                          "ts": datetime.now().isoformat()})
             state["status"] = "escalated"
             log(f"  🛑 ESCALATED: {reason}")

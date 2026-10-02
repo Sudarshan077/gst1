@@ -9,11 +9,11 @@
 
 | Concern | Control |
 |---|---|
-| Identity | Mobile number (OTP-verified) primary; email+password optional secondary. One person = one `users` row. GSTIN is NEVER a login identifier (printed on every invoice — semi-public) |
+| Identity | Email (OTP or password) is the primary login. One person = one `users` row. Mobile optional. GSTIN is NEVER a login identifier (printed on every invoice — semi-public) |
 | OTP | 6-digit, 5-minute expiry, Redis-stored with attempt counter; rate limit 5/hour/identifier; dev mode = email OTP (SMS provider Phase 1) |
 | Session | JWT access 15 min + rotating refresh token 7 days; refresh rotation detected (reuse of a rotated token kills the family) |
 | Passwords | argon2id; only for users who opt into password login; never required |
-| 2FA (CA) | **TOTP mandatory for every ca_firm_member** — enforced at firm-join, not optional. Setup flow: QR + verify code before membership activates |
+| 2FA | TOTP optional for any user wanting extra security — setup flow: QR + verify code |
 | Step-up auth | Fresh OTP required for: export generation, link revocation, member invites, DPDP erasure, TOTP reset |
 | Brute force | Per-identifier + per-IP limits in Redis; exponential backoff; lockout notification via email |
 
@@ -21,11 +21,10 @@
 
 | Rule | Enforcement |
 |---|---|
-| Client users see only businesses where `business_users` grants them OWNER/CLERK | Single FastAPI dependency (`require_business_access`) — never per-route ad-hoc checks |
-| CA firm members see only businesses with an ACTIVE `ca_client_links` row for their firm | Same dependency resolves member → firm → link → business → registration |
-| Granular firm permissions: `can_export`, `can_revoke`, `can_invite_members` | Checked by the same dependency, declared per route |
-| A CA cannot browse unlinked businesses: GSTIN search reveals only "send request" availability, zero business data | Enforced at service layer; covered by an explicit test |
-| Every filing object resolves through a `registration_id` → registration → business → access chain | No endpoint accepts a raw registration/business id without the guard |
+| Users see only GSTINs where `user_gst_access` grants them ADMIN/FILER/VIEWER | Single FastAPI dependency (`require_gstin_access`) — never per-route ad-hoc checks |
+| Role-based permissions: ADMIN (full access + invite), FILER (upload/file), VIEWER (read-only) | Checked by the same dependency, declared per route |
+| A user cannot browse GSTINs they don't have access to | Enforced at service layer; covered by an explicit test |
+| Every filing object resolves through a `gstin` → gst_accounts → user_gst_access chain | No endpoint accepts a raw GSTIN without the guard |
 | Locked periods: FILED periods reject invoice/CDN mutations; amendments are delta records only | Service-layer rule + test |
 
 ## 3. Data protection
@@ -43,23 +42,22 @@
 
 | Obligation | Implementation |
 |---|---|
-| Lawful basis | `consent_records` at link accept (both flows) — purpose-named, version-numbered consent text |
-| Withdrawal | Link revoke = instant access death; consent `withdrawed_at` recorded; DPDP erasure request flows below |
-| Data-principal rights | (a) Self-service export: all business data machine-readable (JSON+CSV+documents manifest); (b) erasure request → workflow with CA-firm notification, 30-day SLA, legal-retention carve-out documented (GST records must be retained — erasure applies to platform copies beyond statutory retention, default 8 FYs) |
-| Breach | 72-hour notification runbook (detect → assess → notify principals + firm) in docs/COMPLIANCE runbook section of this doc's Phase-3 update |
-| Roles | CA firm = data fiduciary; platform = data processor; contract template delivered Phase 3 |
+| Lawful basis | Terms of service accepted at signup; per-GSTIN access is audit-logged |
+| Withdrawal | Access revoke = instant death via user_gst_access deletion; audit logged |
+| Data-principal rights | (a) Self-service export: all GSTIN data machine-readable (JSON+CSV+documents manifest); (b) erasure request → workflow with 30-day SLA, legal-retention carve-out documented (GST records must be retained — erasure applies to platform copies beyond statutory retention, default 8 FYs) |
+| Breach | 72-hour notification runbook (detect → assess → notify principals) in docs/COMPLIANCE runbook section of this doc's Phase-3 update |
+| Roles | GSTIN owner = data principal; platform = data processor |
 | Retention | Default 8 FYs (GST law floor); retention job flags + purge workflow Phase 3 |
 
 ## 5. Audit
 
 | Event | Logged fields |
 |---|---|
-| Link request / accept / reject / revoke | actor, firm, business, consent version |
-| Document upload / view / download | actor, registration, doc |
-| Invoice confirm / edit | actor, payload_diff (JSONB) |
-| Export generation / download | actor, registration, fp, schema_version |
-| Amendment create / export | actor, deltas |
-| Member join / permission change | actor, firm, target member |
+| GSTIN access grant / revoke | actor, gstin, target user, role |
+| Document upload / view / download | actor, gstin, doc |
+| Invoice confirm / edit | actor, gstin, payload_diff (JSONB) |
+| Export generation / download | actor, gstin, fp, schema_version |
+| Amendment create / export | actor, gstin, deltas |
 | Auth events: login, OTP fail-storm, TOTP enable | actor, ip, user-agent |
 
 Audit rows are append-only; no update/delete paths exist in code; DB role has INSERT-only grant on `audit_logs` (migration-enforced).

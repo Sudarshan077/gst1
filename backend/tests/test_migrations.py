@@ -1,13 +1,12 @@
-"""Task 0.3 acceptance: alembic up -> down -> up clean; all v2 tables present.
+"""Task 0.3 acceptance: alembic up -> down -> up clean; all v4 tables present.
 
 Runs the real migration chain against a throwaway database on the dev PG
-server (:5436), asserting every TECHNICAL_ARCHITECTURE §3 table lands in the
-right schema, and that downgrade leaves no tables/enum types behind.
+server (:5436), asserting every TECHNICAL_ARCHITECTURE §3 (v4.0) table lands
+in the right schema, and that downgrade leaves no tables/enum types behind.
 """
 
 from __future__ import annotations
 
-import asyncio
 import sys
 import uuid
 from collections.abc import AsyncGenerator
@@ -20,23 +19,22 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 if sys.platform == "win32":
+    import asyncio
+
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 ADMIN_URL = "postgresql+asyncpg://gst:gst_dev_pass@127.0.0.1:5436/postgres"
 BASE_URL = "postgresql+asyncpg://gst:gst_dev_pass@127.0.0.1:5436"
 
-# TECHNICAL_ARCHITECTURE.md §3 — the v2 table contract, 25 tables.
+# TECHNICAL_ARCHITECTURE.md §3 v4.0 — the unified GSTIN-first table contract
+# (20 tables; the 6 v2 hierarchy tables are removed, gst_accounts takes their
+# place with gstin as the primary key).
 EXPECTED_TABLES: dict[str, set[str]] = {
     "core": {
         "users",
-        "ca_firms",
-        "ca_firm_members",
-        "businesses",
-        "gst_registrations",
-        "business_users",
-        "ca_client_links",
-        "consent_records",
+        "gst_accounts",
+        "user_gst_access",
         "audit_logs",
     },
     "extraction": {
@@ -64,9 +62,7 @@ EXPECTED_TABLES: dict[str, set[str]] = {
 
 def _alembic_config(db_name: str) -> Config:
     cfg = Config(BACKEND_DIR / "alembic.ini")
-    cfg.set_main_option(
-        "script_location", str(BACKEND_DIR / "alembic")
-    )
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     cfg.set_main_option("sqlalchemy.url", f"{BASE_URL}/{db_name}")
     return cfg
 
@@ -155,7 +151,6 @@ def _alembic(db_name: str, op_name: str, target: str) -> None:
         future.result(timeout=120)
 
 
-@pytest.mark.asyncio()
 async def test_upgrade_downgrade_upgrade_cycle_clean(scratch_db: str) -> None:
     """up -> down -> up: the exact acceptance criterion for task 0.3."""
     _alembic(scratch_db, "upgrade", "head")
@@ -171,9 +166,8 @@ async def test_upgrade_downgrade_upgrade_cycle_clean(scratch_db: str) -> None:
     assert tables_3 == tables_1, "second upgrade produced a different table set"
 
 
-@pytest.mark.asyncio()
-async def test_all_v2_tables_present_in_correct_schemas(scratch_db: str) -> None:
-    """All 25 §3 tables exist in core/gst/extraction after upgrade head."""
+async def test_all_v4_tables_present_in_correct_schemas(scratch_db: str) -> None:
+    """All 20 §3 v4 tables exist in core/gst/extraction after upgrade head."""
     _alembic(scratch_db, "upgrade", "head")
     tables, _ = await _tables_and_enums(scratch_db)
 
@@ -183,10 +177,47 @@ async def test_all_v2_tables_present_in_correct_schemas(scratch_db: str) -> None
         extra = actual - expected
         assert not missing, f"{schema}: missing {sorted(missing)}"
         assert not extra, f"{schema}: unexpected {sorted(extra)}"
-    assert len(tables) == 25
+    assert len(tables) == 20
 
 
-@pytest.mark.asyncio()
+async def test_gstin_primary_key_and_access_link(scratch_db: str) -> None:
+    """done_when specifics: core.gst_accounts PK is gstin; user_gst_access
+    links users.id -> gst_accounts.gstin."""
+    _alembic(scratch_db, "upgrade", "head")
+    engine = create_async_engine(f"{BASE_URL}/{scratch_db}")
+    try:
+        async with engine.connect() as conn:
+            pk = [
+                r[0]
+                for r in await conn.execute(
+                    text(
+                        "SELECT a.attname FROM pg_index i "
+                        "JOIN pg_class c ON c.oid = i.indrelid "
+                        "JOIN pg_attribute a ON a.attrelid = c.oid "
+                        "AND a.attnum = ANY(i.indkey) "
+                        "WHERE c.relname = 'gst_accounts' AND i.indisprimary"
+                    )
+                )
+            ]
+            assert pk == ["gstin"], f"core.gst_accounts PK is {pk}, must be ['gstin']"
+
+            fks = await conn.execute(
+                text(
+                    "SELECT confrelid::regclass::text, pg_get_constraintdef(oid) "
+                    "FROM pg_constraint "
+                    "WHERE conrelid = 'core.user_gst_access'::regclass "
+                    "AND contype = 'f' ORDER BY 1"
+                )
+            )
+            fk_rows = {row[0]: row[1] for row in fks}
+            assert "core.gst_accounts" in fk_rows, fk_rows
+            assert "gstin" in fk_rows["core.gst_accounts"], fk_rows
+            assert "core.users" in fk_rows, fk_rows
+            assert "user_id" in fk_rows["core.users"], fk_rows
+    finally:
+        await engine.dispose()
+
+
 async def test_money_columns_are_integer_paise(scratch_db: str) -> None:
     """Hard rule 2: every *_minor money column is integer — no float/numeric."""
     _alembic(scratch_db, "upgrade", "head")
@@ -212,7 +243,8 @@ async def test_money_columns_are_integer_paise(scratch_db: str) -> None:
             f"{_schema}.{_table}.{_column} is {data_type}, must be integer or bigint"
         )
         if data_type == "bigint":
-            assert _table + "." + _column == "gst_registrations.aato_latest_minor", (
+            assert _table + "." + _column == "gst_accounts.aato_latest_minor", (
                 f"unexpected bigint column {_schema}.{_table}.{_column}"
             )
-    assert len(rows) == 18  # exact: 7 invoice_lines + 5 cdns + 5 2b + aato + total
+    # exact: 1 gst_accounts + 1 invoices + 7 invoice_lines + 5 cdns + 4 2b
+    assert len(rows) == 18

@@ -19,7 +19,7 @@ from app.core.auth.errors import (
     TotpInvalid,
 )
 from app.core.auth.redis_client import get_redis
-from app.db.models.core import BusinessUser, CaFirm, CaFirmMember, User
+from app.db.models.core import User, UserGstAccess
 
 
 def _user_out(user: User) -> dict[str, object]:
@@ -180,25 +180,20 @@ async def update_user_totp_secret(
 
 
 async def me(session: AsyncSession, user_id: uuid.UUID) -> dict[str, object]:
-    """GET /auth/me — role-resolved profile (business/firm ids for now)."""
+    """GET /auth/me — profile + accessible GSTINs (v4: unified GSTIN-first model).
+
+    v4.0 removed businesses/ca_firms; access is resolved through
+    user_gst_access (users.id -> gst_accounts.gstin). The v2 firm_id /
+    businesses fields are gone from the response.
+    """
     user = await session.get(User, user_id)
     if user is None:
         raise TokenInvalid("user no longer exists")
-    business_rows = await session.execute(
-        select(BusinessUser.business_id).where(BusinessUser.user_id == user_id)
+    access_rows = await session.execute(
+        select(UserGstAccess.gstin).where(UserGstAccess.user_id == user_id)
     )
-    business_ids = [str(row[0]) for row in business_rows]
-    firm_rows = (
-        await session.execute(
-            select(CaFirmMember)
-            .join(CaFirm, CaFirm.id == CaFirmMember.firm_id)
-            .where(CaFirmMember.user_id == user_id)
-            .order_by(CaFirm.created_at.asc(), CaFirmMember.joined_at.asc())
-        )
-    ).scalars().all()
-    firm_id = str(firm_rows[0].firm_id) if firm_rows else None
+    gstins = [str(row[0]) for row in access_rows]
     return {
         "user": _user_out(user),
-        "businesses": business_ids,
-        "firm": firm_id,
+        "gstins": gstins,
     }
