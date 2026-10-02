@@ -18,6 +18,7 @@ from app.core.auth.errors import (
     TokenInvalid,
     TotpInvalid,
 )
+from app.core.auth.hashing import verify_password
 from app.core.auth.redis_client import get_redis
 from app.db.models.core import GstAccount, User, UserGstAccess
 
@@ -32,9 +33,7 @@ def _user_out(user: User) -> dict[str, object]:
     }
 
 
-async def request_otp(
-    session: AsyncSession, identifier: str, purpose: str
-) -> dict[str, object]:
+async def request_otp(session: AsyncSession, identifier: str, purpose: str) -> dict[str, object]:
     """POST /auth/otp/request — rate-limited OTP issuance (dev echoes dev_otp)."""
     redis = get_redis()
     result = await otp_svc.request_otp(redis, identifier, purpose)
@@ -54,9 +53,7 @@ async def verify_otp(
     purpose = await otp_svc.verify_otp(redis, identifier, code)
     user = (
         await session.execute(
-            select(User).where(
-                (User.mobile == identifier) | (User.email == identifier)
-            )
+            select(User).where((User.mobile == identifier) | (User.email == identifier))
         )
     ).scalar_one_or_none()
     if user is None:
@@ -78,6 +75,28 @@ async def verify_otp(
     return _user_out(user), {"access_token": access, "refresh_token": refresh}
 
 
+async def login_with_password(
+    session: AsyncSession, identifier: str, password: str
+) -> tuple[dict[str, object], dict[str, str]]:
+    """POST /auth/login/password"""
+    user = (
+        await session.execute(
+            select(User).where((User.mobile == identifier) | (User.email == identifier))
+        )
+    ).scalar_one_or_none()
+    if (
+        user is None
+        or user.password_hash is None
+        or not verify_password(password, user.password_hash)
+    ):
+        raise InvalidCredentials("invalid identifier or password")
+
+    redis = get_redis()
+    access = token_svc.create_access_token(user.id)
+    refresh = await token_svc.issue_refresh_family(redis, user.id)
+    return _user_out(user), {"access_token": access, "refresh_token": refresh}
+
+
 def _placeholder_mobile() -> str:
     """Email-first users need a unique non-null mobile (users.mobile NOT NULL).
 
@@ -87,9 +106,7 @@ def _placeholder_mobile() -> str:
     return "0" + uuid.uuid4().hex[:13]
 
 
-async def refresh(
-    session: AsyncSession, refresh_token: str
-) -> tuple[dict[str, str], str]:
+async def refresh(session: AsyncSession, refresh_token: str) -> tuple[dict[str, str], str]:
     """POST /auth/refresh — rotate; reuse of a rotated token kills the family.
 
     Returns ((access_token, refresh_token), user_id) — the access JWT is fresh;
@@ -176,13 +193,9 @@ async def require_totp_enabled(session: AsyncSession, user_id: uuid.UUID) -> Non
         raise TotpInvalid("TOTP setup + verification required before firm membership")
 
 
-async def update_user_totp_secret(
-    session: AsyncSession, user_id: uuid.UUID, secret: str
-) -> None:
+async def update_user_totp_secret(session: AsyncSession, user_id: uuid.UUID, secret: str) -> None:
     """Reset path (step-up protected at the route layer)."""
-    await session.execute(
-        update(User).where(User.id == user_id).values(totp_secret=secret)
-    )
+    await session.execute(update(User).where(User.id == user_id).values(totp_secret=secret))
     await session.commit()
 
 

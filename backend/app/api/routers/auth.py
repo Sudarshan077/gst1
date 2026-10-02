@@ -12,6 +12,7 @@ from app.api.schemas import (
     MeEnvelope,
     OtpRequestIn,
     OtpVerifyIn,
+    PasswordLoginIn,
     RefreshIn,
     StepUpIn,
     TotpVerifyIn,
@@ -55,6 +56,22 @@ async def otp_verify(
     body: OtpVerifyIn, response: Response, session: SessionDep
 ) -> dict[str, object]:
     user, tokens = await service.verify_otp(session, body.identifier, body.otp)
+    _set_refresh_cookie(response, tokens["refresh_token"])
+    return {
+        "success": True,
+        "data": {
+            "user": user,
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+        },
+    }
+
+
+@router.post("/login/password")
+async def password_login(
+    body: PasswordLoginIn, response: Response, session: SessionDep
+) -> dict[str, object]:
+    user, tokens = await service.login_with_password(session, body.identifier, body.password)
     _set_refresh_cookie(response, tokens["refresh_token"])
     return {
         "success": True,
