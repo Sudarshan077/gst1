@@ -1,15 +1,14 @@
 "use client";
 
 /**
- * CA shell home — client roster placeholder with live /auth/me data.
- * Roster grid/search arrive in later tasks (FRONTEND_SPECIFICATION.md §3.3).
+ * CA shell home — client roster with live /auth/me data.
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 
 import { ShellNav } from "@/components/shared/ShellNav";
-import { ApiError, fetchMe, setAccessToken, silentRefresh } from "@/lib/api/client";
+import { ApiError, fetchMe, setAccessToken, silentRefresh, listGstAccounts, GstAccountDto } from "@/lib/api/client";
 import { clearSession } from "@/lib/auth/session";
 
 interface Me {
@@ -20,7 +19,9 @@ interface Me {
 export default function CaHomePage() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
+  const [gstAccounts, setGstAccounts] = useState<GstAccountDto[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -31,8 +32,11 @@ export default function CaHomePage() {
           router.replace("/login");
           return;
         }
-        const data = await fetchMe();
-        if (!cancelled) setMe(data);
+        const [meData, gstData] = await Promise.all([fetchMe(), listGstAccounts()]);
+        if (!cancelled) {
+            setMe(meData);
+            setGstAccounts(gstData);
+        }
       } catch (err) {
         if (!cancelled) {
           if (err instanceof ApiError && err.status === 401) {
@@ -48,6 +52,13 @@ export default function CaHomePage() {
       cancelled = true;
     };
   }, [router]);
+
+  const filteredAccounts = useMemo(() => {
+    return gstAccounts.filter(acc => 
+        acc.legal_name.toLowerCase().includes(search.toLowerCase()) || 
+        acc.gstin.toLowerCase().startsWith(search.toLowerCase())
+    );
+  }, [gstAccounts, search]);
 
   async function signOut() {
     setAccessToken(null);
@@ -79,29 +90,35 @@ export default function CaHomePage() {
         onSignOut={signOut}
       />
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
-        <h1 className="text-2xl font-semibold">Client roster</h1>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Firms linked to your account appear here; add clients via GSTIN
-          request or invite code (Phase-1 flows).
-        </p>
-        <div className="mt-8 rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            No clients yet — firm id: {me?.firm ?? "—"}
-          </p>
+        <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold">Client roster</h1>
+            <input 
+                type="text"
+                placeholder="Search by name or GSTIN..."
+                className="rounded-lg border p-2 text-sm"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+            />
         </div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <Link
-            href="/totp"
-            className="rounded-lg border border-slate-200 p-4 text-sm hover:border-indigo-400 dark:border-slate-800"
-          >
-            TOTP status: {me?.user.totp_enabled === true ? "enabled" : "not set up"}
-          </Link>
-          <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-            Return prep — upcoming
-          </div>
-          <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-            2B / ITC — upcoming
-          </div>
+        
+        <div className="mt-8 grid gap-4">
+            {filteredAccounts.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                        No clients matching "{search}" — firm id: {me?.firm ?? "—"}
+                    </p>
+                </div>
+            ) : (
+                filteredAccounts.map(acc => (
+                    <Link key={acc.gstin} href={`/${acc.gstin}`} className="flex items-center justify-between rounded-lg border p-4 hover:border-indigo-400">
+                        <div>
+                            <div className="font-semibold">{acc.legal_name}</div>
+                            <div className="text-sm text-slate-500">{acc.gstin}</div>
+                        </div>
+                        <div className="text-sm">{acc.role}</div>
+                    </Link>
+                ))
+            )}
         </div>
       </main>
     </div>

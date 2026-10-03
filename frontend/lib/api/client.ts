@@ -72,6 +72,20 @@ export interface FirmCreateResult {
   ca_code: string;
 }
 
+export interface GstAccountDto {
+  gstin: string;
+  legal_name: string;
+  trade_name: string | null;
+  pan: string;
+  state_code: string;
+  filing_scheme: string;
+  irn_applicable: boolean;
+  aato_latest_minor: number;
+  registered_address: string | null;
+  role: string;
+  created_at: string | null;
+}
+
 let accessToken: string | null = null;
 let refreshPromise: Promise<boolean> | null = null;
 
@@ -205,4 +219,8 @@ export async function createFirm(
     method: "POST",
     body: JSON.stringify({ firm_name: firmName, pan }),
   });
+}
+
+export async function listGstAccounts(): Promise<GstAccountDto[]> {
+  return apiFetch("/gst-accounts");
 }
