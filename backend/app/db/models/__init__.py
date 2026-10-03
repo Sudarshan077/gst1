@@ -8,6 +8,11 @@ from app.db.models.core import (
     User,
     UserGstAccess,
 )
+from app.db.models.dpdp import (
+    DPDPRequest,
+    DPDPRequestStatus,
+    DPDPRequestType,
+)
 from app.db.models.extraction import (
     EXTRACTION_SCHEMA,
     CaptureSource,
@@ -54,6 +59,9 @@ __all__ = [
     "AuditLog",
     "CaptureSource",
     "CreditDebitNote",
+    "DPDPRequest",
+    "DPDPRequestStatus",
+    "DPDPRequestType",
     "Document",
     "DocumentSeries",
     "EInvoice",
