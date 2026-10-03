@@ -1,0 +1,2 @@
+extraction/golden_set/ground_truth/* filter=lfs diff=lfs merge=lfs -text
+extraction/golden_set/predictions/* filter=lfs diff=lfs merge=lfs -text
