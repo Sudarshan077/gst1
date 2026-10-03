@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -48,5 +52,26 @@ class GstAccountOut(BaseModel):
 class CollaboratorInviteIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    email: str = Field(min_length=3, max_length=255)
-    role: str = Field(pattern="^(ADMIN|FILER|VIEWER)$")
+
+class Gstr2bImportIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    payload: dict[str, Any]
+
+
+class Gstr2bStatementOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    gstin: str
+    fp: str
+    source: str
+    downloaded_at: datetime
+
+
+class ItcReconciliationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    purchase_invoice_id: uuid.UUID | None
+    gstr2b_entry_id: uuid.UUID | None
+    match_status: str
+    confidence: float | None
+    remarks: str | None
