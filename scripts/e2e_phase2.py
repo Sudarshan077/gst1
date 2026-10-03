@@ -5,7 +5,7 @@ import os
 
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 backend_path = os.path.join(root_path, 'backend')
-os.environ['PYTHONPATH'] = backend_path
+os.environ['PYTHONPATH'] = root_path
 
 test_file = os.path.join(backend_path, "tests", "test_e2e_phase2.py")
 result = subprocess.run(
