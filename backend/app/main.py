@@ -18,6 +18,7 @@ from app.api.errors import (
 )
 from app.api.routers.auth import router as auth_router
 from app.api.routers.documents import router as documents_router
+from app.api.routers.einvoice import router as einvoice_router
 from app.api.routers.gst_accounts import router as gst_accounts_router
 from app.api.routers.itc import router as itc_router
 from app.api.routers.returns import router as returns_router
@@ -28,7 +29,7 @@ Handler = Callable[[Request, Exception], Awaitable[JSONResponse]]
 
 def create_app() -> FastAPI:
     app = FastAPI(title="GST Filing Platform API", version="0.1.0")
-    for r in (auth_router, gst_accounts_router, documents_router, itc_router, returns_router):
+    for r in (auth_router, gst_accounts_router, documents_router, itc_router, returns_router, einvoice_router):
         app.include_router(r, prefix="/api/v1")
 
     # Cast-free handler registration: the handlers match Starlette's expected
