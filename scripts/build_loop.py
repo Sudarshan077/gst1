@@ -226,30 +226,85 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
         # .cmd shim); the hermes oneshot child it spawned survives as an orphan
         # and keeps the stdout pipe open, so run()'s internal communicate() then
         # blocks FOREVER and the loop freezes with no TIMEOUT line in run.log
-        # (observed 3 Oct 2026: two silent hangs, 62 min and 46+ min). We avoid
-        # subprocess.run entirely: Popen + wait(timeout), then taskkill /T /F to
-        # take down the whole tree before draining the pipes.
+        # (observed 3 Oct 2026: two silent hangs, 62 min and 46+ min).
+        #
+        # Liveness policy (Tony, 3 Oct): do NOT kill a working long-runner.
+        # 1800s is no longer a hard kill deadline except as the STUCK-DOWN
+        # backstop below. kill_tree() is only called when the agent is judged
+        # stuck: for every check window, if the whole agent tree accumulated
+        # less than STUCK_MIN_CPU seconds of CPU time, it is idle-waiting
+        # (dead upstream reply, hung tool subprocess) — kill it. A genuinely
+        # thinking/streaming agent accumulates CPU every window (observed
+        # ~0.8s CPU/min while writing code) and keeps its run no matter how
+        # long it takes. STUCK_HARD_CAP seconds is the absolute backstop for
+        # a very-low-CPU but formally "advancing" zombie (safety, rarely hit).
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace", env=agent_env(),
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
         )
-        try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            log(f"  ✗ {model} TIMEOUT after {timeout}s — killing process tree")
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                           capture_output=True, check=False)
+        import psutil  # installed into this interpreter (tools py3.14) 3 Oct
+
+        def tree_pids(root_pid: int) -> list[int]:
+            """Agent + all descendants (hermes shim -> agent kernel -> tools)."""
+            p_ids: list[int] = []
             try:
-                proc.communicate(timeout=60)
-            except Exception:
+                parent = psutil.Process(root_pid)
+                p_ids.append(root_pid)
+                for ch in parent.children(recursive=True):
+                    p_ids.append(ch.pid)
+            except psutil.Error:
                 pass
+            return p_ids
+
+        def tree_cpu(root_pid: int) -> float:
+            total = 0.0
+            for pid in tree_pids(root_pid):
+                try:
+                    total += psutil.Process(pid).cpu_times().user
+                except (psutil.Error, OSError):
+                    pass
+            return total
+
+        def kill_tree(root_pid: int) -> None:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(root_pid)],
+                           capture_output=True, check=False)
             try:
                 proc.kill()
             except Exception:
                 pass
-            log(f"  ✗ {model} TIMEOUT after {timeout}s")
-            return f"TIMEOUT after {timeout}s"
+
+        STUCK_CHECK_INTERVAL = 120   # every 2 min
+        STUCK_MIN_CPU = 10.0         # < 10s CPU per 2-min window = idle-stuck
+        STUCK_HARD_CAP = 7200        # absolute 2h backstop per role run
+
+        deadline = time.time() + STUCK_HARD_CAP
+        window_start = time.time()
+        cpu_start = tree_cpu(proc.pid)
+        while proc.poll() is None:
+            now_t = time.time()
+            if now_t >= deadline:
+                log(f"  ✗ {model} HARD CAP {STUCK_HARD_CAP}s reached — killing tree")
+                kill_tree(proc.pid)
+                try:
+                    proc.communicate(timeout=60)
+                except Exception:
+                    pass
+                return f"TIMEOUT after {STUCK_HARD_CAP}s"
+            if now_t - window_start >= STUCK_CHECK_INTERVAL:
+                cpu_now = tree_cpu(proc.pid)
+                window_cpu = cpu_now - cpu_start
+                if window_cpu < STUCK_MIN_CPU:
+                    log(f"  ✗ {model} STUCK {now_t - t0:.0f}s in — only {window_cpu:.1f}s CPU in last {STUCK_CHECK_INTERVAL//60} min — killing tree")
+                    kill_tree(proc.pid)
+                    try:
+                        proc.communicate(timeout=60)
+                    except Exception:
+                        pass
+                    return f"TIMEOUT (stuck) after {now_t - t0:.0f}s"
+                cpu_start = cpu_now
+                window_start = now_t
+            time.sleep(5)
         out, _ = proc.communicate()
     except Exception as exc:  # spawn failure = route fault, let the chain fail over
         log(f"  ✗ {model} SPAWN FAILED: {exc}")
