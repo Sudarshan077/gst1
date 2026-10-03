@@ -27,7 +27,8 @@ from app.api.schemas_gst import (
     GstAccountCreateIn,
     GstAccountPatchIn,
 )
-from app.core.access import GstinAccess, require_gstin_access, require_gstin_write
+from app.core.access import GstinAccess, require_gstin_access, require_gstin_write, require_gstin_invite, require_gstin_revoke, require_gstin_export
+from app.core.auth.dependencies import require_user, require_stepup
 from app.core.auth.dependencies import require_user
 from app.core.gst_accounts import service
 from app.db.models.core import AccessRole, FilingScheme
@@ -72,7 +73,7 @@ async def list_gst_accounts(session: SessionDep, user_id: UserDep) -> dict[str, 
 
 @router.get("/{gstin}")
 async def get_gst_account(
-    access: GstinDep,
+    access: Annotated[GstinAccess, Depends(require_gstin_export('gstin'))],
     session: SessionDep,
 ) -> dict[str, Any]:
     detail = await service.get_gst_account_detail(session, access.gstin, access.role)
@@ -110,8 +111,9 @@ async def get_gstin_audit(
 @router.post("/{gstin}/collaborators")
 async def invite_collaborator(
     body: CollaboratorInviteIn,
-    access: GstinWriteDep,
+    access: Annotated[GstinAccess, Depends(require_gstin_invite('gstin'))],
     session: SessionDep,
+    _stepup: Annotated[uuid.UUID, Depends(require_stepup)],
 ) -> dict[str, Any]:
     data = await service.add_collaborator(
         session,
@@ -137,8 +139,9 @@ async def list_collaborators(
 @router.delete("/{gstin}/collaborators/{user_id}")
 async def revoke_collaborator(
     user_id: uuid.UUID,
-    access: GstinDep,
+    access: Annotated[GstinAccess, Depends(require_gstin_revoke('gstin'))],
     session: SessionDep,
+    _stepup: Annotated[uuid.UUID, Depends(require_stepup)],
 ) -> dict[str, Any]:
     data = await service.revoke_collaborator(
         session,

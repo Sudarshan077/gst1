@@ -303,6 +303,43 @@ async def revoke_collaborator(
     return {"user_id": str(target_user_id), "gstin": account.gstin, "revoked": True}
 
 
+async def update_collaborator(
+    session: AsyncSession,
+    gstin: str,
+    target_user_id: uuid.UUID,
+    new_role: AccessRole,
+    actor_user_id: uuid.UUID,
+) -> dict[str, Any]:
+    """PATCH /gst-accounts/{gstin}/collaborators/{userId} — update role."""
+    account = await get_gst_account(session, gstin)
+    
+    grant = (
+        await session.execute(
+            select(UserGstAccess).where(
+                UserGstAccess.gstin == account.gstin,
+                UserGstAccess.user_id == target_user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if grant is None:
+        raise CollaboratorNotFound()
+
+    old_role = grant.role
+    grant.role = new_role
+    
+    await audit(
+        session,
+        action="GSTIN_ACCESS_UPDATED",
+        entity="user_gst_access",
+        entity_id=str(target_user_id),
+        actor_user_id=actor_user_id,
+        gstin=account.gstin,
+        payload_diff={"old_role": old_role.value, "new_role": new_role.value},
+    )
+    await session.commit()
+    return {"user_id": str(target_user_id), "gstin": account.gstin, "role": new_role.value}
+
+
 async def _admin_count(session: AsyncSession, gstin: str) -> int:
     from sqlalchemy import func
 

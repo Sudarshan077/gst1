@@ -68,6 +68,18 @@ class GstinAccess:
         return self.role in _WRITE_ROLES
 
     @property
+    def can_export(self) -> bool:
+        return self.role in _WRITE_ROLES
+
+    @property
+    def can_revoke(self) -> bool:
+        return self.role is AccessRole.ADMIN
+
+    @property
+    def can_invite_members(self) -> bool:
+        return self.role is AccessRole.ADMIN
+
+    @property
     def is_admin(self) -> bool:
         return self.role is AccessRole.ADMIN
 
@@ -75,6 +87,18 @@ class GstinAccess:
         """Raise 403 unless the route's role requirement is met."""
         if not self.can_write:
             raise PermissionDenied("FILER or ADMIN role required on this GSTIN")
+
+    def require_export(self) -> None:
+        if not self.can_export:
+            raise PermissionDenied("FILER or ADMIN role required to export")
+
+    def require_revoke(self) -> None:
+        if not self.can_revoke:
+            raise PermissionDenied("ADMIN role required to revoke")
+
+    def require_invite(self) -> None:
+        if not self.can_invite_members:
+            raise PermissionDenied("ADMIN role required to invite members")
 
 
 async def resolve_gstin_access(
@@ -147,6 +171,54 @@ def require_gstin_write(gstin_param: str = "gstin") -> Any:
             raise AccessDenied("no access to this GSTIN")
         access = await resolve_gstin_access(session, user_id, str(raw))
         access.require_write()
+        return access
+
+    return _guard
+
+
+def require_gstin_export(gstin_param: str = "gstin") -> Any:
+    async def _guard(
+        request: Request,
+        session: Annotated[AsyncSession, Depends(get_session)],
+        user_id: Annotated[uuid.UUID, Depends(require_user)],
+    ) -> GstinAccess:
+        raw = request.path_params.get(gstin_param)
+        if not raw:
+            raise AccessDenied("no access to this GSTIN")
+        access = await resolve_gstin_access(session, user_id, str(raw))
+        access.require_export()
+        return access
+
+    return _guard
+
+
+def require_gstin_revoke(gstin_param: str = "gstin") -> Any:
+    async def _guard(
+        request: Request,
+        session: Annotated[AsyncSession, Depends(get_session)],
+        user_id: Annotated[uuid.UUID, Depends(require_user)],
+    ) -> GstinAccess:
+        raw = request.path_params.get(gstin_param)
+        if not raw:
+            raise AccessDenied("no access to this GSTIN")
+        access = await resolve_gstin_access(session, user_id, str(raw))
+        access.require_revoke()
+        return access
+
+    return _guard
+
+
+def require_gstin_invite(gstin_param: str = "gstin") -> Any:
+    async def _guard(
+        request: Request,
+        session: Annotated[AsyncSession, Depends(get_session)],
+        user_id: Annotated[uuid.UUID, Depends(require_user)],
+    ) -> GstinAccess:
+        raw = request.path_params.get(gstin_param)
+        if not raw:
+            raise AccessDenied("no access to this GSTIN")
+        access = await resolve_gstin_access(session, user_id, str(raw))
+        access.require_invite()
         return access
 
     return _guard
