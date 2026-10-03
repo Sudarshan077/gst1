@@ -51,6 +51,13 @@ class GstAccountOut(BaseModel):
 
 class CollaboratorInviteIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+
+
+class CollaboratorUpdateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: str = Field(min_length=1)
 
 
 class Gstr2bImportIn(BaseModel):

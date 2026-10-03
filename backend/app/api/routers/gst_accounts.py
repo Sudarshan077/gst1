@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas_gst import (
     CollaboratorInviteIn,
+    CollaboratorUpdateIn,
     GstAccountCreateIn,
     GstAccountPatchIn,
 )
@@ -134,6 +135,24 @@ async def list_collaborators(
         "success": True,
         "data": await service.list_collaborators(session, access.gstin),
     }
+
+
+@router.patch("/{gstin}/collaborators/{user_id}")
+async def update_collaborator_role(
+    user_id: uuid.UUID,
+    body: CollaboratorUpdateIn,
+    access: Annotated[GstinAccess, Depends(require_gstin_invite('gstin'))],
+    session: SessionDep,
+    _stepup: Annotated[uuid.UUID, Depends(require_stepup)],
+) -> dict[str, Any]:
+    data = await service.update_collaborator(
+        session,
+        access.gstin,
+        target_user_id=user_id,
+        new_role=AccessRole(body.role),
+        actor_user_id=access.user_id,
+    )
+    return {"success": True, "data": data}
 
 
 @router.delete("/{gstin}/collaborators/{user_id}")
