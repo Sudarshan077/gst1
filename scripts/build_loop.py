@@ -499,11 +499,13 @@ HARD RULES (from docs/AI_BUILD_PLAYBOOK.md):
 4. Locked periods return 423; originals never edited post-filing.
 5. ruff + mypy clean (backend); eslint + tsc clean (frontend). Lint failures block.
 6. Declare deps in pyproject.toml / package.json — never pip install at runtime.
-7. Do NOT touch files outside this task's scope.
+7. Do NOT touch files outside this task's scope. In your summary, declare the EXACT list of files you created/modified.
 8. NEVER modify any file under build/ (plan.json, state.json, run.log, prompt.txt) or scripts/build_loop.py — those are the loop's own control files, not project code. Editing them corrupts the build loop.
 9. If a doc is ambiguous, STOP and say so in your final summary — do not guess in the GST domain.
+10. NEVER run git reset --hard, git checkout -- ., git clean, or any command that discards the working tree or other tasks' files. Your scope is this task's files only.
+11. COMMIT YOUR WORK before you finish (this is how your work survives): git add ONLY the files you created/modified for THIS task (never git add -A, never git add .), then git commit -m "TASK {task['id']}: <short title>". If tests pass, the commit is mandatory — uncommitted work is treated as not delivered. If commit hooks fail, fix the committed issue itself; never amend or rewrite others' commits.
 {fb}
-FINISH by running the task's verification yourself and reporting exact test names + counts in your final summary. Your final summary is what the Tester will read — be precise.
+FINISH by running the task's verification yourself and reporting exact test names + counts in your final summary, then the commit SHA (git log --oneline -1). Your final summary is what the Tester will read — be precise.
 """
 
 
@@ -525,8 +527,9 @@ YOUR JOB:
 1. Inspect the current state of the repo (git status, files, tests).
 2. Run the task's verification commands yourself — NEVER trust a prior summary.
 3. Check the docs-contract: API shapes, paise-not-float, guard dependency, lock rules.
-4. Check for foreign edits: git diff --stat should show ONLY files in this task's scope.
+4. Check for foreign edits: git status --porcelain should show ONLY untracked test-results/playwright junk plus this task's files. If the Builder already COMMITTED its work (a TASK-n commit is the desired end state), git status is the check; otherwise the task's declared files sit modified/untracked and MUST be committed before PASS — a PASS with the deliverable uncommitted is invalid.
 5. Verify with REAL command output (test names + pass/fail counts).
+6. Check the Builder committed the work: `git log --oneline -1` should show a TASK-commit containing the deliverable. If not, verdict FAIL with the exact git add/commit commands listed.
 
 EVIDENCE REQUIREMENT (a verdict without this is rejected):
 - Paste the ACTUAL command lines you ran and their ACTUAL output (test names + counts, or exact error text).
@@ -592,6 +595,7 @@ REASON: <one line why>
 RULES:
 - ADVANCE only if the tester said PASS AND the evidence is REAL AND you found no blocking defect.
 - RETRY if the tester said FAIL, OR the evidence is WEAK (force a real re-verification), OR a fix is clearly actionable. Always supply a BUILDER_INSTRUCTION on RETRY (max {MAX_RETRIES} retries already tracked).
+- A BUILDER_INSTRUCTION must NEVER prescribe destructive or history-rewriting git commands: no `git reset --hard`, no `git checkout -- .`, no `git clean`, no revert of other tasks' commits, no force-push. Those destroyed verified work once already. Instruct fixes forward (edit/add/commit the named files), never backward.
 - ESCALATE if: a task failed after retries, docs are ambiguous and you cannot resolve, or all phases are complete. Every ESCALATE MUST carry a REASON — escalation halts the build and waits for a human, so an unexplained one is treated as a formatting error and re-asked.
 - When a phase's tasks are all done, set NEXT to the first task of the next phase. If no next phase, ACTION: ESCALATE with NEXT:none and REASON "all phases complete".
 - If you ADVANCE, also decompose any stub task whose title contains "expand at runtime" into concrete tasks and write them into build/plan.json BEFORE proceeding (real tasks with id/title/docs/done_when).
@@ -865,7 +869,42 @@ def main():
         # honours the stricter of (tester verdict, evidence gate, monitor call).
         monitor_blocks = (not passed) or (not real_ev) or (m_evidence == "WEAK")
 
+        # ── Deterministic landing gate (belt over the prompt braces) ──
+        # A verified deliverable that is not committed is not landed: today's
+        # worktree wipe destroyed three tasks' worth of never-committed work.
+        # If the monitor wants to ADVANCE but the tree still carries modified/
+        # untracked task files (anything outside build/ and the known-ignorable
+        # junk), run a mechanical, minimal commit of exactly those files first.
+        # Nothing here touches build/, scripts/build_loop.py, or history.
         if action == "ADVANCE" and not monitor_blocks:
+            try:
+                st = subprocess.run(["git", "status", "--porcelain"],
+                                    capture_output=True, text=True,
+                                    cwd=ROOT, check=False)
+                lines_in = [l for l in (st.stdout or "").splitlines() if l.strip()]
+                ignorable = ("test-results/", "playwright-report/", "build/")
+                landable = [
+                    l for l in lines_in
+                    if not any(ig in l for ig in ignorable)
+                    and not l.strip().startswith("?? tools/")
+                ]
+                if landable:
+                    log(f"  ⤓ landing gate: {len(landable)} uncommitted task file(s) — committing before done")
+                    paths = [l[3:].strip().strip('"') for l in landable]
+                    add = subprocess.run(["git", "add", "--", *paths],
+                                         capture_output=True, text=True,
+                                         cwd=ROOT, check=False)
+                    if add.returncode == 0:
+                        cm = subprocess.run(
+                            ["git", "commit", "-m",
+                             f"TASK {sid}: land verified work (loop landing gate)"],
+                            capture_output=True, text=True, cwd=ROOT, check=False)
+                        log("  ⤓ landing gate: " +
+                            ((cm.stdout or cm.stderr or "").strip().splitlines() or ["done"])[-1][:100])
+                else:
+                    log("  ⤓ landing gate: tree clean — nothing to land")
+            except Exception as exc:
+                log(f"  ⤓ landing gate skipped ({exc}) — proceed on prompt-level rule 11")
             slot["status"] = "done"
             log(f"  ✅ task {sid} DONE (evidence verified)")
         elif action == "ADVANCE" and monitor_blocks:
