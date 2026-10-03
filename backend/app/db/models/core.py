@@ -64,6 +64,7 @@ class User(Base):
     )
     totp_secret: Mapped[str | None] = mapped_column(String(255))
     totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notification_preferences: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -27,20 +27,20 @@ async def create_notification(
 
 async def _route_to_channels(session: AsyncSession, user_id: str, n_type: str, payload: dict):
     """Route notification to email/WhatsApp based on user preferences."""
-    # TODO: Fetch user preferences from DB (need to add prefs to User model)
-    # For now, default to email if user has email.
     
     user = await session.get(User, user_id)
     if not user:
         return
 
-    # Email
-    if user.email:
+    prefs = user.notification_preferences or {}
+
+    # Email (default enabled)
+    if user.email and prefs.get("email", True):
         await _send_email(user.email, n_type, payload)
     
-    # WhatsApp (Stubbed/config-gated)
-    # if settings.WHATSAPP_ENABLED:
-    #    await _send_whatsapp(user.mobile, n_type, payload)
+    # WhatsApp (default disabled)
+    if user.mobile and prefs.get("whatsapp", False):
+        await _send_whatsapp(user.mobile, n_type, payload)
 
 async def _send_email(email: str, n_type: str, payload: dict):
     """Placeholder for email service."""

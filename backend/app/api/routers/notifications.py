@@ -85,6 +85,17 @@ async def mark_notification_read(
     
     return {"success": True}
 
+@router.get("/me/notification-prefs")
+async def get_notification_prefs(
+    db: AsyncSession = Depends(get_session),
+    user_id: uuid.UUID = Depends(require_user),
+) -> dict[str, Any]:
+    """Get notification preferences."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return {"prefs": user.notification_preferences or {}}
+
 @router.patch("/me/notification-prefs")
 async def update_notification_prefs(
     body: dict[str, Any],
@@ -92,4 +103,10 @@ async def update_notification_prefs(
     user_id: uuid.UUID = Depends(require_user),
 ) -> dict[str, Any]:
     """Update notification preferences (channels per event type)."""
-    return {"success": True, "prefs": body}
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    user.notification_preferences = body
+    await db.commit()
+    return {"success": True, "prefs": user.notification_preferences}
