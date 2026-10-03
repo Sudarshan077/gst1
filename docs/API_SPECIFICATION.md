@@ -123,7 +123,8 @@
 |---|---|---|
 | GET | `/notifications?unread=` | in-app list |
 | POST | `/notifications/{id}/read` | |
-| PATCH | `/me/notification-prefs` | channels per event type |
+|| GET | `/me/notification-prefs` | get channels per event type |
+|| PATCH | `/me/notification-prefs` | update channels per event type |
 
 ---
 
