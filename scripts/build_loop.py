@@ -234,10 +234,15 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
         # stuck: for every check window, if the whole agent tree accumulated
         # less than STUCK_MIN_CPU seconds of CPU time, it is idle-waiting
         # (dead upstream reply, hung tool subprocess) — kill it. A genuinely
-        # thinking/streaming agent accumulates CPU every window (observed
-        # ~0.8s CPU/min while writing code) and keeps its run no matter how
-        # long it takes. STUCK_HARD_CAP seconds is the absolute backstop for
-        # a very-low-CPU but formally "advancing" zombie (safety, rarely hit).
+        # thinking/streaming agent accumulates CPU every window and keeps its
+        # run no matter how long it takes. MEASURED 3 Oct 16:05 on this host:
+        # a live, actively tool-calling agent tree accumulates only ~0.45–1.05
+        # CPU-seconds per 120 s (i.e. ~0.04s CPU per 10 min); a genuinely idle
+        # tree measures 0.00s. The original 10.0s/120s threshold was ~10x above
+        # the working rate and false-killed every builder rung for ~90 min
+        # (15:04–16:05, 10 STUCK kills, zero verdicts). Threshold is now
+        # 0.2s/600s: ~5x below the observed floor, still above measured idle 0.
+        # Never raise it back to a seconds-per-2-min figure.
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace", env=agent_env(),
@@ -274,8 +279,8 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
             except Exception:
                 pass
 
-        STUCK_CHECK_INTERVAL = 120   # every 2 min
-        STUCK_MIN_CPU = 10.0         # < 10s CPU per 2-min window = idle-stuck
+        STUCK_CHECK_INTERVAL = 600   # every 10 min
+        STUCK_MIN_CPU = 0.2          # < 0.2s CPU per 10-min window = idle-stuck
         STUCK_HARD_CAP = 7200        # absolute 2h backstop per role run
 
         deadline = time.time() + STUCK_HARD_CAP
