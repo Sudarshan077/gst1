@@ -283,18 +283,19 @@ async def check_and_fire_reminders(session: AsyncSession) -> int:
                     ).scalar_one_or_none()
 
                     if existing_notif is None:
-                        notif = Notification(
-                            user_id=acc.user_id,
-                            gstin=period.gstin,
-                            type="DEADLINE_REMINDER",
-                            payload={
+                        from app.services.notifications import create_notification
+                        await create_notification(
+                            session,
+                            str(acc.user_id),
+                            period.gstin,
+                            "DEADLINE_REMINDER",
+                            {
                                 "fp": period.fp,
                                 "return_type": return_type,
                                 "due_date": due_date.isoformat(),
                                 "days_remaining": days_left,
                             },
                         )
-                        session.add(notif)
                         fired_count += 1
     await session.commit()
     return fired_count
