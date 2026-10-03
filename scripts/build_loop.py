@@ -65,27 +65,36 @@ ROLES_PATH = os.path.join(BUILD_DIR, "role_models.json")
 # and pass the arithmetic check (12345.67 @18% → 2222.22). Per Tony's standing
 # role assignment they are the PRIMARY routes: builder=best-coding,
 # tester=best-reasoning. Keep the ollama-cloud and free routes as failover.
+# OmniRoute-ONLY. Tony's standing instruction: this build runs entirely on
+# OmniRoute (ollama-cloud credits are exhausted / being reserved). Do not add an
+# ollama-cloud or other provider here — an out-of-band edit that reintroduces one
+# is a regression, not a failover improvement.
 ROLE_CHAINS = {
     "builder": [
         ("auto/best-coding", "omniroute"),
+        ("auto/pro-coding", "omniroute"),
         ("gemini/gemini-3.1-flash-lite", "omniroute"),
-        ("glm-5.3-flash", "ollama-cloud"),
+        ("groq/openai/gpt-oss-120b", "omniroute"),
     ],
     "tester": [
         ("auto/best-reasoning", "omniroute"),
+        ("auto/pro-reasoning", "omniroute"),
         ("gemini/gemini-3.1-flash-lite", "omniroute"),
-        ("deepseek-v4.1-flash", "ollama-cloud"),
     ],
+    # Monitor = deepseek-v4.1-flash on OmniRoute (Tony, 3 Oct). Kept INDEPENDENT
+    # of the Tester route so the pass/fail judgement does not come from the same
+    # upstream that produced the verification evidence.
     "monitor": [
+        ("deepseek/deepseek-v4.1-flash", "omniroute"),
         ("auto/best-reasoning", "omniroute"),
         ("gemini/gemini-3.1-flash-lite", "omniroute"),
-        ("glm-5.3-flash", "ollama-cloud"),
     ],
 }
 
 # Builder-feedback / rework model chain (used to turn tester findings into a fix).
 FEEDBACK_CHAIN = [
     ("auto/best-coding", "omniroute"),
+    ("auto/pro-coding", "omniroute"),
     ("gemini/gemini-3.1-flash-lite", "omniroute"),
 ]
 
