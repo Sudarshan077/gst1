@@ -67,22 +67,26 @@ ROLES_PATH = os.path.join(BUILD_DIR, "role_models.json")
 # tester=best-reasoning. Keep the ollama-cloud and free routes as failover.
 ROLE_CHAINS = {
     "builder": [
+        ("auto/best-coding", "omniroute"),
+        ("gemini/gemini-3.1-flash-lite", "omniroute"),
         ("glm-5.3-flash", "ollama-cloud"),
-        ("glm-5.3", "ollama-cloud"),
     ],
     "tester": [
+        ("auto/best-reasoning", "omniroute"),
+        ("gemini/gemini-3.1-flash-lite", "omniroute"),
         ("deepseek-v4.1-flash", "ollama-cloud"),
-        ("glm-5.3", "ollama-cloud"),
     ],
     "monitor": [
-        ("glm-5.3", "ollama-cloud"),
+        ("auto/best-reasoning", "omniroute"),
+        ("gemini/gemini-3.1-flash-lite", "omniroute"),
         ("glm-5.3-flash", "ollama-cloud"),
     ],
 }
 
 # Builder-feedback / rework model chain (used to turn tester findings into a fix).
 FEEDBACK_CHAIN = [
-    ("glm-5.3", "ollama-cloud"),
+    ("auto/best-coding", "omniroute"),
+    ("gemini/gemini-3.1-flash-lite", "omniroute"),
 ]
 
 # Routes that currently answer with a LOCAL STUB rather than the real upstream:
