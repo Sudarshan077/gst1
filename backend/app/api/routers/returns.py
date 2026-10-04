@@ -74,13 +74,38 @@ async def file_return(
     await session.commit()
     return {"success": True, "data": {"status": "FILED"}}
 
-@router.post("/gstr1a")
-async def gstr1a_amendments(
+@router.post("/gstr4/prepare")
+async def prepare_gstr4(
     gstin: str,
     fp: str,
     access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
     session: SessionDep,
-    body: dict[str, Any],
 ) -> dict[str, Any]:
-    amendments = await create_gstr1a_amendments(session, gstin, fp, body)
-    return {"success": True, "data": {"amendments": amendments, "status": "AMENDED"}}
+    return {"success": True, "data": {"summary": "OK"}}
+
+@router.post("/gstr4/filed")
+async def file_gstr4(
+    gstin: str,
+    fp: str,
+    access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict[str, Any]:
+    period = await session.get(FilingPeriod, (gstin, fp))
+    if period is None:
+        period = FilingPeriod(
+            gstin=gstin,
+            fp=fp,
+            scheme_snapshot="COMPOSITION",
+            status=FilingStatus.FILED,
+            filed_at=datetime.utcnow(),
+            filed_by=user_id,
+        )
+        session.add(period)
+    else:
+        period.status = FilingStatus.FILED
+        period.filed_at = datetime.utcnow()
+        period.filed_by = user_id
+    await session.commit()
+    return {"success": True, "data": {"status": "FILED"}}
+
