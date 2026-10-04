@@ -85,7 +85,7 @@ export default function ClientHomePage() {
         <div className="mt-8 rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
           <p className="text-sm text-slate-500 dark:text-slate-400">
             No registrations linked yet — businesses:{" "}
-            {me !== null ? me.businesses.length : "…"}
+            {me !== null ? (me.businesses?.length ?? 0) : "…"}
           </p>
         </div>
       </main>
