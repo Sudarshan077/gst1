@@ -5,7 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.access import GstinAccess, require_gstin_access
+from app.core.access import GstinAccess, require_gstin_access, audit
 from app.core.auth.dependencies import require_user
 from app.db.models.gst import ExportType, FilingPeriod, FilingStatus, Gstr1Export
 from app.db.session import get_session
@@ -22,7 +22,9 @@ async def prepare_gstr1(
     fp: str,
     access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
     session: SessionDep,
+    user_id: UserDep,
 ) -> dict[str, Any]:
+    await audit(session, action="GSTR1_PREPARE", entity="return", entity_id=f"{gstin}-{fp}", actor_user_id=user_id, gstin=gstin)
     return {"success": True, "data": {"summary": "OK"}}
 
 @router.post("/gstr1/generate")
@@ -45,6 +47,7 @@ async def generate_gstr1(
         export_type=ExportType.ORIGINAL,
     )
     session.add(export)
+    await audit(session, action="GSTR1_GENERATE", entity="return", entity_id=str(export.id), actor_user_id=user_id, gstin=gstin)
     await session.commit()
     return {"success": True, "data": {"export_id": str(export.id)}}
 
@@ -71,6 +74,7 @@ async def file_return(
         period.status = FilingStatus.FILED
         period.filed_at = datetime.utcnow()
         period.filed_by = user_id
+    await audit(session, action="RETURN_FILED", entity="return", entity_id=f"{gstin}-{fp}", actor_user_id=user_id, gstin=gstin)
     await session.commit()
     return {"success": True, "data": {"status": "FILED"}}
 
