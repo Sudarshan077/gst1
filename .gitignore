@@ -29,3 +29,4 @@ tools/minio/
 
 # Native Windows tool binaries
 tools/*.exe
+backups/
