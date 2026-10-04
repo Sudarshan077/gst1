@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     gsp_sandbox_mode: bool = True
     gsp_api_base_url: str = "https://sandbox.gst.gov.in"
 
+    # IRP API
+    irp_client_id: str = "dev-client-id"
+    irp_client_secret: str = "dev-client-secret"
+    irp_username: str = "dev-username"
+    irp_password: str = "dev-password"
+    irp_sandbox_mode: bool = True
+    irp_api_base_url: str = "https://einvoice1-trial.nic.in"
+
 
 @lru_cache
 def get_settings() -> Settings:
