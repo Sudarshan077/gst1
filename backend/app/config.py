@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     # Upload guard per SECURITY_AND_ACCESS.md §6.
     max_document_pages: int = 50
 
+    # GSP API
+    gsp_client_id: str = "dev-client-id"
+    gsp_client_secret: str = "dev-client-secret"
+    gsp_username: str = "dev-username"
+    gsp_password: str = "dev-password"
+    gsp_sandbox_mode: bool = True
+    gsp_api_base_url: str = "https://sandbox.gst.gov.in"
+
 
 @lru_cache
 def get_settings() -> Settings:
