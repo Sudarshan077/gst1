@@ -324,9 +324,38 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
         STUCK_MIN_IO_DELTA = 1024          # < 1KB I/O delta = no disk activity
         STUCK_MIN_MEM_DELTA = 256 * 1024   # < 256KB mem delta = no streaming/loading
 
+        # On Windows, psutil.children(recursive=True) can miss grandchildren that
+        # spawned between checks, so tree_pids() may return a subset. As a safety
+        # net, also scan for ANY python.exe/hermes.exe process whose command line
+        # matches this agent's --query-file — those are guaranteed to be our
+        # children even if the parent chain is broken.
+        AGENT_QUERY_FILE = PROMPT_FILE  # the --query-file arg passed to hermes
+
+        def all_agent_pids() -> list[int]:
+            """Find all processes that share this agent's --query-file arg."""
+            pids = set(tree_pids(proc.pid))
+            try:
+                import psutil as _ps
+                for p in _ps.process_iter(["pid", "cmdline"]):
+                    cl = " ".join(p.info.get("cmdline") or [])
+                    if PROMPT_FILE.replace("\\", "\\\\") in cl or PROMPT_FILE in cl:
+                        pids.add(p.pid)
+            except Exception:
+                pass
+            return list(pids)
+
+        def tree_cpu_safe() -> float:
+            total = 0.0
+            for pid in all_agent_pids():
+                try:
+                    total += psutil.Process(pid).cpu_times().user
+                except (psutil.Error, OSError):
+                    pass
+            return total
+
         deadline = time.time() + STUCK_HARD_CAP
         window_start = time.time()
-        cpu_start = tree_cpu(proc.pid)
+        cpu_start = tree_cpu_safe()
         io_start = tree_io(proc.pid)
         mem_start = tree_mem(proc.pid)
         while proc.poll() is None:
@@ -340,7 +369,7 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
                     pass
                 return f"TIMEOUT after {STUCK_HARD_CAP}s"
             if now_t - window_start >= STUCK_CHECK_INTERVAL:
-                cpu_now = tree_cpu(proc.pid)
+                cpu_now = tree_cpu_safe()
                 window_cpu = cpu_now - cpu_start
                 net_conns = tree_net_connections(proc.pid)
                 io_now = tree_io(proc.pid)
