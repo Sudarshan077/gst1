@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * CA shell home — client roster with live /auth/me data.
+ * CA roster view — GST accounts list with live data. Unified v4 model:
+ * same one user type as /app; this route is a roster convenience page.
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,16 +10,12 @@ import { useEffect, useState, useMemo } from "react";
 
 import { ShellNav } from "@/components/shared/ShellNav";
 import { ApiError, fetchMe, setAccessToken, silentRefresh, listGstAccounts, GstAccountDto } from "@/lib/api/client";
+import type { MeDto } from "@/lib/api/client";
 import { clearSession } from "@/lib/auth/session";
-
-interface Me {
-  user: { full_name: string; totp_enabled: boolean };
-  firm: string | null;
-}
 
 export default function CaHomePage() {
   const router = useRouter();
-  const [me, setMe] = useState<Me | null>(null);
+  const [me, setMe] = useState<MeDto | null>(null);
   const [gstAccounts, setGstAccounts] = useState<GstAccountDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -85,7 +82,7 @@ export default function CaHomePage() {
   return (
     <div className="flex min-h-screen flex-col">
       <ShellNav
-        roleLabel="CA firm"
+        roleLabel="GST Filing"
         userName={me?.user.full_name ?? "…"}
         onSignOut={signOut}
       />
@@ -105,7 +102,7 @@ export default function CaHomePage() {
             {filteredAccounts.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                        No clients matching &ldquo;{search}&rdquo; — firm id: {me?.firm ?? "—"}
+                        No GST accounts matching &ldquo;{search}&rdquo;
                     </p>
                 </div>
             ) : (

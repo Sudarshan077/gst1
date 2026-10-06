@@ -1,18 +1,18 @@
 "use client";
 
 /**
- * TOTP onboarding — QR + verify (SECURITY §1: mandatory for CA firm
- * membership, client-side verify before enabling). After enablement the CA
- * creates their firm; PARTNER membership activates on success.
+ * TOTP self-enrollment — QR + verify (SECURITY §1: TOTP is a per-user 2FA
+ * option; verify client-side before enabling). With the unified v4 model
+ * there is no role split, so after enabling the user returns to /app.
  */
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 
-import { ApiError, createFirm, totpSetup, totpVerify } from "@/lib/api/client";
-import { setRoleCookie } from "@/lib/auth/session";
+import { ApiError, totpSetup, totpVerify } from "@/lib/api/client";
+import { setSessionCookie } from "@/lib/auth/session";
 
-type Stage = "setup" | "verify" | "firm";
+type Stage = "setup" | "verify" | "enabled";
 
 export default function TotpPage() {
   const router = useRouter();
@@ -20,8 +20,6 @@ export default function TotpPage() {
   const [secret, setSecret] = useState("");
   const [qrUri, setQrUri] = useState("");
   const [code, setCode] = useState("");
-  const [firmName, setFirmName] = useState("");
-  const [pan, setPan] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -56,7 +54,8 @@ export default function TotpPage() {
     setError(null);
     try {
       await totpVerify(code);
-      setStage("firm");
+      setSessionCookie();
+      setStage("enabled");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "invalid TOTP code");
     } finally {
@@ -64,20 +63,9 @@ export default function TotpPage() {
     }
   }
 
-  async function createTheFirm(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await createFirm(firmName, pan);
-      setRoleCookie("CA");
-      router.push("/ca");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "firm creation failed");
-    } finally {
-      setBusy(false);
-    }
+  function goToShell() {
+    router.push("/app");
+    router.refresh();
   }
 
   return (
@@ -85,7 +73,7 @@ export default function TotpPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h1 className="text-xl font-semibold">Two-factor authentication</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Required for CA firm access — scan with any authenticator app.
+          Optional second factor — scan with any authenticator app.
         </p>
 
         {stage === "setup" && (
@@ -134,49 +122,23 @@ export default function TotpPage() {
           </form>
         )}
 
-        {stage === "firm" && (
-          <form onSubmit={createTheFirm} className="mt-6 space-y-4">
+        {stage === "enabled" && (
+          <div className="mt-6 space-y-4">
             <p
               className="text-sm font-medium text-green-700 dark:text-green-400"
               data-testid="totp-enabled-banner"
             >
               ✓ TOTP enabled
             </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Create your firm to finish onboarding.
-            </p>
-            <label className="block text-sm font-medium">
-              Firm name
-              <input
-                type="text"
-                required
-                value={firmName}
-                onChange={(e) => setFirmName(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
-                data-testid="firm-name"
-              />
-            </label>
-            <label className="block text-sm font-medium">
-              Firm PAN
-              <input
-                type="text"
-                required
-                value={pan}
-                onChange={(e) => setPan(e.target.value.toUpperCase())}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm uppercase dark:border-slate-700 dark:bg-slate-800"
-                placeholder="AAAAA9999A"
-                data-testid="firm-pan"
-              />
-            </label>
             <button
-              type="submit"
-              disabled={busy}
+              type="button"
+              onClick={goToShell}
               className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-              data-testid="firm-create"
+              data-testid="totp-continue"
             >
-              {busy ? "Creating…" : "Create firm →"}
+              Continue →
             </button>
-          </form>
+          </div>
         )}
 
         {error !== null && (

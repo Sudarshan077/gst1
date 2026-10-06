@@ -13,7 +13,7 @@ import {
   setAccessToken,
   verifyOtp,
 } from "@/lib/api/client";
-import { clearSession, setRoleCookie } from "@/lib/auth/session";
+import { setSessionCookie } from "@/lib/auth/session";
 
 type Stage = "identifier" | "otp";
 
@@ -25,7 +25,7 @@ export default function LoginPage() {
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [pendingRole, setPendingRole] = useState<"CLIENT" | "CA" | null>(null);
+  const [done, setDone] = useState(false);
 
   async function request(e: React.FormEvent) {
     e.preventDefault();
@@ -49,13 +49,9 @@ export default function LoginPage() {
     try {
       const res = await verifyOtp(identifier, otp);
       setAccessToken(res.access_token);
-      clearSession();
-      // Role comes from server truth (/auth/me), then drives the shell routing.
-      const { fetchMe } = await import("@/lib/api/client");
-      const me = await fetchMe();
-      const role = me.firm !== null ? "CA" : "CLIENT";
-      setRoleCookie(role);
-      setPendingRole(role);
+      // One user type — session cookie is routing only (FRONTEND_SPEC §4).
+      setSessionCookie();
+      setDone(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "OTP verification failed");
     } finally {
@@ -64,11 +60,11 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
-    if (pendingRole !== null) {
-      router.push(pendingRole === "CA" ? "/ca" : "/app");
+    if (done) {
+      router.push("/app");
       router.refresh();
     }
-  }, [pendingRole, router]);
+  }, [done, router]);
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-md flex-col justify-center px-4">

@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * Registration — role pick (business / CA firm), then OTP with REGISTER
- * purpose. New users are auto-created by the backend on REGISTER verify.
+ * Registration — one user type (no role pick), OTP with REGISTER purpose.
+ * New users are auto-created by the backend on REGISTER verify; GSTIN
+ * attachment (not a role choice) determines what the user can operate on.
  */
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   ApiError,
@@ -13,25 +14,19 @@ import {
   setAccessToken,
   verifyOtp,
 } from "@/lib/api/client";
-import { clearSession, setRoleCookie } from "@/lib/auth/session";
+import { setSessionCookie } from "@/lib/auth/session";
 
-type Role = "CLIENT" | "CA";
-type Stage = "pick" | "identifier" | "otp";
+type Stage = "identifier" | "otp";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [role, setRole] = useState<Role | null>(null);
   const [identifier, setIdentifier] = useState("");
   const [otp, setOtp] = useState("");
   const [devOtp, setDevOtp] = useState<string | null>(null);
-  const [stage, setStage] = useState<Stage>("pick");
+  const [stage, setStage] = useState<Stage>("identifier");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  function pick(r: Role) {
-    setRole(r);
-    setStage("identifier");
-  }
+  const [done, setDone] = useState(false);
 
   async function request(e: React.FormEvent) {
     e.preventDefault();
@@ -55,16 +50,9 @@ export default function RegisterPage() {
     try {
       const res = await verifyOtp(identifier, otp);
       setAccessToken(res.access_token);
-      clearSession();
-      if (role === null) {
-        setError("select an account type first");
-        return;
-      }
-      // Register flow sets a role hint cookie to route the browser; login relies
-      // on /auth/me server truth (gst_accounts is the authoritative shape).
-      setRoleCookie(role);
-      router.push(role === "CA" ? "/totp" : "/app");
-      router.refresh();
+      // One user type — session cookie is routing only (FRONTEND_SPEC §4).
+      setSessionCookie();
+      setDone(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "OTP verification failed");
     } finally {
@@ -72,44 +60,23 @@ export default function RegisterPage() {
     }
   }
 
+  useEffect(() => {
+    if (done) {
+      router.push("/app");
+      router.refresh();
+    }
+  }, [done, router]);
+
   return (
     <main className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-md flex-col justify-center px-4">
       <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h1 className="text-xl font-semibold">Create your account</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Mobile number or email — we send a 6-digit code.
+        </p>
 
-        {stage === "pick" && (
-          <div className="mt-6 space-y-3">
-            <button
-              type="button"
-              onClick={() => pick("CLIENT")}
-              className="w-full rounded-lg border border-slate-300 p-4 text-left hover:border-indigo-500 hover:bg-indigo-50/50 dark:border-slate-700 dark:hover:border-indigo-400 dark:hover:bg-indigo-950/50"
-              data-testid="register-client"
-            >
-              <span className="font-semibold">Business (GST-registered)</span>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Upload documents, review ledgers, track filing deadlines.
-              </p>
-            </button>
-            <button
-              type="button"
-              onClick={() => pick("CA")}
-              className="w-full rounded-lg border border-slate-300 p-4 text-left hover:border-indigo-500 hover:bg-indigo-50/50 dark:border-slate-700 dark:hover:border-indigo-400 dark:hover:bg-indigo-950/50"
-              data-testid="register-ca"
-            >
-              <span className="font-semibold">CA firm</span>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Manage clients, prepare returns, file GSTR-1/3B. TOTP required.
-              </p>
-            </button>
-          </div>
-        )}
-
-        {stage === "identifier" && role !== null && (
+        {stage === "identifier" && (
           <form onSubmit={request} className="mt-6 space-y-4">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {role === "CA" ? "CA firm" : "Business"} account — where do we
-              send the code?
-            </p>
             <label className="block text-sm font-medium">
               Mobile or email
               <input
@@ -130,21 +97,13 @@ export default function RegisterPage() {
             >
               {busy ? "Sending…" : "Send code"}
             </button>
-            <button
-              type="button"
-              onClick={() => setStage("pick")}
-              className="text-sm text-slate-500 hover:underline"
-            >
-              ← change account type
-            </button>
           </form>
         )}
 
-        {stage === "otp" && role !== null && (
+        {stage === "otp" && (
           <form onSubmit={verify} className="mt-6 space-y-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              {role === "CA" ? "CA firm" : "Business"} — code sent to{" "}
-              <span className="font-mono">{identifier}</span>
+              Code sent to <span className="font-mono">{identifier}</span>
             </p>
             {devOtp !== null && (
               <p
@@ -172,7 +131,7 @@ export default function RegisterPage() {
               className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
               data-testid="reg-verify"
             >
-              {busy ? "Verifying…" : role === "CA" ? "Verify → set up TOTP" : "Verify & continue"}
+              {busy ? "Verifying…" : "Verify & continue"}
             </button>
             <button
               type="button"

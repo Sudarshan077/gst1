@@ -1,36 +1,31 @@
 /**
  * Routing-only guard — FRONTEND_SPECIFICATION.md §4: middleware handles
- * routing, never authorization (the server is the authority). The gst_role
- * cookie is a non-sensitive hint written after /auth/me role resolution.
+ * routing, never authorization (the server is the authority). A single
+ * gst_session cookie marks a logged-in browser; no role split exists in the
+ * unified v4 model (one user type; GSTIN attachment grants access).
  */
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/register", "/totp"];
-const ONBOARDING_PATHS = ["/totp"]; // TOTP setup must stay reachable during CA onboarding
+const PUBLIC_PATHS = ["/login", "/register"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-function isOnboarding(pathname: string): boolean {
-  return ONBOARDING_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const role = request.cookies.get("gst_role")?.value ?? null;
+  const authed = request.cookies.has("gst_session");
 
   if (isPublic(pathname)) {
-    // Authenticated users skip the auth screens, except onboarding flows
-    // (e.g. CA TOTP setup) that must remain reachable mid-onboarding.
-    if ((role === "CLIENT" || role === "CA") && !isOnboarding(pathname)) {
+    if (authed) {
       return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next();
   }
 
-  if (role === null) {
-    // navigation sugar only — the cookie is client-writable, so shells re-verify via silentRefresh() + /auth/me (item 3).
+  if (!authed) {
+    // navigation sugar only — the cookie is client-writable, so shells
+    // re-verify via silentRefresh() + /auth/me before rendering data.
     const login = new URL("/login", request.url);
     login.searchParams.set("next", pathname);
     return NextResponse.redirect(login);

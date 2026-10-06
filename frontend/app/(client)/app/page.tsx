@@ -1,24 +1,21 @@
 "use client";
 
 /**
- * Client shell home — per-GSTIN month cards placeholder with live /auth/me.
- * Month cards + deadlines arrive in later tasks (FRONTEND_SPECIFICATION.md §1).
+ * Unified shell home — one user type (v4 model). Shows the user's GST
+ * accounts from /auth/me (gst_accounts: GSTIN + role + legal_name); the
+ * month workspace + deadlines arrive in later tasks (FRONTEND_SPEC §1).
  */
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ShellNav } from "@/components/shared/ShellNav";
 import { ApiError, fetchMe, setAccessToken, silentRefresh } from "@/lib/api/client";
+import type { MeDto } from "@/lib/api/client";
 import { clearSession } from "@/lib/auth/session";
-
-interface Me {
-  user: { full_name: string };
-  businesses: string[];
-}
 
 export default function ClientHomePage() {
   const router = useRouter();
-  const [me, setMe] = useState<Me | null>(null);
+  const [me, setMe] = useState<MeDto | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,20 +70,41 @@ export default function ClientHomePage() {
   return (
     <div className="flex min-h-screen flex-col">
       <ShellNav
-        roleLabel="Business"
+        roleLabel="GST Filing"
         userName={me?.user.full_name ?? "…"}
         onSignOut={signOut}
       />
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
-        <h1 className="text-2xl font-semibold">Your GST months</h1>
+        <h1 className="text-2xl font-semibold">Your GST accounts</h1>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
           Registration month cards and deadlines land with the month workspace.
         </p>
-        <div className="mt-8 rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            No registrations linked yet — businesses:{" "}
-            {me !== null ? (me.businesses?.length ?? 0) : "…"}
-          </p>
+        <div className="mt-8 grid gap-4">
+          {me !== null && me.gst_accounts.length > 0 ? (
+            me.gst_accounts.map((acc) => (
+              <div
+                key={acc.gstin}
+                className="flex items-center justify-between rounded-lg border border-slate-200 p-4 dark:border-slate-800"
+                data-testid="gst-account-card"
+              >
+                <div>
+                  <div className="font-semibold">{acc.legal_name}</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">
+                    {acc.gstin}
+                  </div>
+                </div>
+                <div className="text-sm text-slate-500 dark:text-slate-400">
+                  {acc.role}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No GST accounts linked yet — attach a GSTIN to begin.
+              </p>
+            </div>
+          )}
         </div>
       </main>
     </div>

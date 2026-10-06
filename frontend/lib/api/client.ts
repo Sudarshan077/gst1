@@ -39,10 +39,15 @@ interface UserDto {
   totp_enabled: boolean;
 }
 
+export interface GstinRefDto {
+  gstin: string;
+  role: string;
+  legal_name: string;
+}
+
 export interface MeDto {
   user: UserDto;
-  businesses: string[];
-  firm: string | null;
+  gst_accounts: GstinRefDto[];
 }
 
 export interface OtpRequestResult {
@@ -63,13 +68,6 @@ export interface TotpSetupResult {
 
 export interface TotpVerifyResult {
   enabled: boolean;
-}
-
-export interface FirmCreateResult {
-  id: string;
-  firm_name: string;
-  pan: string;
-  ca_code: string;
 }
 
 export interface GstAccountDto {
@@ -208,16 +206,6 @@ export async function totpVerify(code: string): Promise<TotpVerifyResult> {
   return apiFetch("/auth/totp/verify", {
     method: "POST",
     body: JSON.stringify({ code }),
-  });
-}
-
-export async function createFirm(
-  firmName: string,
-  pan: string,
-): Promise<FirmCreateResult> {
-  return apiFetch("/firm", {
-    method: "POST",
-    body: JSON.stringify({ firm_name: firmName, pan }),
   });
 }
 

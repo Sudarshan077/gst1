@@ -1,34 +1,23 @@
 /**
  * Session store (module scope, client-side): access JWT in memory only
- * (SECURITY §6: no tokens in localStorage), role in a non-sensitive,
- * non-httpOnly routing cookie. The backend remains the authorization
- * authority — FRONTEND_SPECIFICATION.md §4.
+ * (SECURITY §6: no tokens in localStorage). A single routing cookie marks an
+ * authenticated session for the middleware routing guard; no role split exists
+ * in the unified v4 model (FRONTEND_SPECIFICATION.md §4).
  */
-import type { MeDto } from "@/lib/api/client";
 
-export type Role = "CLIENT" | "CA";
+const SESSION_COOKIE = "gst_session";
 
-const ROLE_COOKIE = "gst_role";
-
-export function setRoleCookie(role: Role): void {
+export function setSessionCookie(): void {
   // routing hint only — never used for authorization
-  document.cookie = `${ROLE_COOKIE}=${role}; path=/; samesite=lax; max-age=${7 * 24 * 3600}`;
+  document.cookie = `${SESSION_COOKIE}=1; path=/; samesite=lax; max-age=${7 * 24 * 3600}`;
 }
 
-export function readRoleCookie(): Role | null {
-  const match = document.cookie
+export function readSessionCookie(): boolean {
+  return document.cookie
     .split("; ")
-    .find((c) => c.startsWith(`${ROLE_COOKIE}=`));
-  if (!match) return null;
-  const value = match.split("=")[1];
-  return value === "CLIENT" || value === "CA" ? value : null;
+    .some((c) => c.startsWith(`${SESSION_COOKIE}=`));
 }
 
 export function clearSession(): void {
-  document.cookie = `${ROLE_COOKIE}=; path=/; max-age=0`;
-}
-
-/** Resolve the effective role from /auth/me (server truth), not the cookie. */
-export function resolveRole(me: MeDto): Role {
-  return me.firm !== null ? "CA" : "CLIENT";
+  document.cookie = `${SESSION_COOKIE}=; path=/; max-age=0`;
 }

@@ -1,14 +1,12 @@
 /**
- * Task 0.7 gate — Playwright: both roles onboard, routed to the correct
- * shell. Backend (8084) + frontend dev server (9094) must be running; the
- * backend needs PG:5436 + Redis:6380 (bootstrap_stack.py).
+ * Task 0.7 gate — Playwright: unified onboarding, no role split (v4 model,
+ * VERIFICATION_SWEEP.md Lens 2). Backend (8084) + frontend dev server (9094)
+ * must be running; the backend needs PG:5436 + Redis:6380 (bootstrap_stack.py).
  *
  * Synthetic identities only — mobile numbers use the reserved 0-prefix test
- * range; the CA firm PAN is format-valid synthetic data (no real PII).
+ * range; no real PII.
  */
 import { expect, test, Page } from "@playwright/test";
-
-import { totpCode } from "./totp-utils";
 
 const BACKEND = "http://127.0.0.1:8084";
 
@@ -52,14 +50,18 @@ async function waitForLoginDevOtp(page: Page): Promise<string> {
   return match![1];
 }
 
-test.describe("client onboarding", () => {
-  test("business role registers and lands on client shell", async ({ page }) => {
+test.describe("unified onboarding", () => {
+  test("register has no role pick and lands on the unified shell", async ({
+    page,
+  }) => {
     const mobile = uniqueMobile();
     // The backend must know this identifier for REGISTER verify to auto-create the user.
     await requestOtp(mobile, "REGISTER");
 
     await page.goto("/register");
-    await page.getByTestId("register-client").click();
+    // Lens 2 (VERIFICATION_SWEEP.md): no CA/business role selection may exist.
+    await expect(page.getByTestId("register-client")).toHaveCount(0);
+    await expect(page.getByTestId("register-ca")).toHaveCount(0);
     await page.getByTestId("reg-identifier").fill(mobile);
     await page.getByTestId("reg-request-otp").click();
     const devOtp = await waitForDevOtp(page);
@@ -68,10 +70,11 @@ test.describe("client onboarding", () => {
 
     await expect(page).toHaveURL(/\/app$/, { timeout: 10_000 });
     await expect(page.getByTestId("shell-user")).toContainText("User");
-    await expect(page.locator('[data-testid="shell-role"]')).toHaveText("Business");
   });
 
-  test("login for existing client routes to client shell", async ({ page }) => {
+  test("login for existing user routes to the unified shell", async ({
+    page,
+  }) => {
     const mobile = uniqueMobile();
     await requestOtp(mobile, "REGISTER");
     const { dev_otp: regOtp } = await requestOtp(mobile, "REGISTER");
@@ -90,53 +93,19 @@ test.describe("client onboarding", () => {
     await page.getByTestId("login-otp").fill(pageOtp);
     await page.getByTestId("login-verify").click();
 
-    // Wait for shell render; client-side navigation lands on the server-truth shell.
-    await expect(page.getByTestId("shell-user")).toBeVisible({ timeout: 10_000 });
+    // Wait for shell render; client-side navigation lands on the shell.
+    await expect(page.getByTestId("shell-user")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page).toHaveURL(/\/app$/, { timeout: 10_000 });
   });
-});
 
-test.describe("CA onboarding", () => {
-  test("CA role registers, enrolls TOTP, creates firm, lands on CA shell", async ({
+  test("shell lists GST accounts from /auth/me gst_accounts", async ({
     page,
   }) => {
     const mobile = uniqueMobile();
     await requestOtp(mobile, "REGISTER");
-
-    await page.goto("/register");
-    await page.getByTestId("register-ca").click();
-    await page.getByTestId("reg-identifier").fill(mobile);
-    await page.getByTestId("reg-request-otp").click();
-    const devOtp = await waitForDevOtp(page);
-    await page.getByTestId("reg-otp").fill(devOtp);
-    await page.getByTestId("reg-verify").click();
-
-    // TOTP enforced pre-firm-join (SECURITY §1) — routed before any firm page.
-    await expect(page).toHaveURL(/\/totp$/, { timeout: 10_000 });
-    await page.getByTestId("totp-begin").click();
-    await expect(page.getByTestId("totp-qr")).toBeVisible();
-    const secret = await page.getByTestId("totp-secret").textContent();
-    expect(secret).toBeTruthy();
-
-    const code = totpCode(secret!.trim());
-    await page.getByTestId("totp-code").fill(code);
-    await page.getByTestId("totp-verify-btn").click();
-    await expect(page.getByTestId("totp-enabled-banner")).toBeVisible();
-
-    await page.getByTestId("firm-name").fill("E2E Test CA Firm");
-    await page.getByTestId("firm-pan").fill("AAAFE9999F");
-    await page.getByTestId("firm-create").click();
-
-    // CA shell verifies session server-side; wait for shell load instead of URL.
-    // firm-create currently 404s in this build; assert we remain on the TOTP/firm
-    // page as the realistic current state.
-    await expect(page.getByTestId("totp-enabled-banner")).toBeVisible({ timeout: 2_000 });
-  });
-
-  test("CA login routes to CA shell", async ({ page }) => {
-    const mobile = uniqueMobile();
-    await requestOtp(mobile, "REGISTER");
     const { dev_otp: regOtp } = await requestOtp(mobile, "REGISTER");
-    expect(regOtp).toBeTruthy();
     const res = await fetch(`${BACKEND}/api/v1/auth/otp/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -147,41 +116,47 @@ test.describe("CA onboarding", () => {
     await page.goto("/login");
     await page.getByTestId("login-identifier").fill(mobile);
     await page.getByTestId("login-request-otp").click();
-    const caLoginOtp = await waitForLoginDevOtp(page);
-    await page.getByTestId("login-otp").fill(caLoginOtp);
+    const pageOtp = await waitForLoginDevOtp(page);
+    await page.getByTestId("login-otp").fill(pageOtp);
     await page.getByTestId("login-verify").click();
 
-    // CA login lands on the server-truth shell (no firm → client /app, else /ca).
-    // Wait for the shell to render and assert the user is visible.
-    await expect(page.getByTestId("shell-user")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("shell-user")).toBeVisible({
+      timeout: 10_000,
+    });
+    // A fresh user has no GST accounts — the empty state must render (never
+    // the removed businesses/firm fields).
+    await expect(page.getByText("No GST accounts linked yet")).toBeVisible({
+      timeout: 10_000,
+    });
   });
 });
 
 test.describe("route guard", () => {
   test("unauthenticated visitor is redirected to login", async ({ page }) => {
     await page.addInitScript(() => {
-      document.cookie = "gst_role=; path=/; max-age=0";
+      document.cookie = "gst_session=; path=/; max-age=0";
     });
     await page.goto("/app");
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("forged gst_role cookie without session is rejected", async ({ page }) => {
+  test("forged gst_session cookie without session is rejected", async ({
+    page,
+  }) => {
     await page.context().addCookies([
-      { name: "gst_role", value: "CA", domain: "127.0.0.1", path: "/" },
+      { name: "gst_session", value: "1", domain: "127.0.0.1", path: "/" },
     ]);
     await page.goto("/ca");
     await expect(page).toHaveURL(/\/login/, { timeout: 10_000 });
   });
 
-  test("authenticated user hitting /login is sent to their shell", async ({
+  test("authenticated user hitting /login is sent to the shell", async ({
     page,
   }) => {
     const mobile = uniqueMobile();
     await requestOtp(mobile, "REGISTER");
 
     await page.goto("/register");
-    await page.getByTestId("register-client").click();
     await page.getByTestId("reg-identifier").fill(mobile);
     await page.getByTestId("reg-request-otp").click();
     const devOtp = await waitForDevOtp(page);
