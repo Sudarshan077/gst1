@@ -1,7 +1,6 @@
-"""L2 auth suite — TOTP setup/verify + step-up token flow (SECURITY §1).
+"""L2 auth suite — TOTP setup/verify + step-up token flow (API_SPEC §1).
 
-TOTP is mandatory for every ca_firm_member; the enforcement point is the
-firm-join guard (task 0.5) — here we prove the setup/verify lifecycle and the
+TOTP is optional for every user. Here we prove the setup/verify lifecycle and
 step-up token contract.
 """
 

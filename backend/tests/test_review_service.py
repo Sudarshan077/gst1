@@ -83,7 +83,11 @@ async def _seed_doc_with_draft(
     fields = dict(fields)
     fields["buyer_gstin"] = gstin
     async with sessionmaker() as session:
-        user = User(mobile="9" + uuid.uuid4().hex[:9], full_name="DS Co")
+        user = User(
+            email=f"{uuid.uuid4().hex[:9]}@test.local",
+            mobile="9" + uuid.uuid4().hex[:9],
+            full_name="DS Co",
+        )
         session.add(user)
         await session.flush()
         session.add(

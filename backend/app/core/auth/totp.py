@@ -1,10 +1,7 @@
-"""TOTP (time-based 2FA) service — mandatory for every ca_firm_member.
+"""TOTP (time-based 2FA) service — optional extra security for any user.
 
-SECURITY_AND_ACCESS.md §1: "TOTP mandatory for every ca_firm_member — enforced
-at firm-join, not optional. Setup flow: QR + verify code before membership
-activates." pyotp supplies the RFC 6238 implementation; the secret lives on the
-users row (totp_secret / totp_enabled_at) until the firm-join guard task wires
-the enforcement point.
+Setup flow: QR + verify code; the secret lives on the users row
+(totp_secret / totp_enabled_at) until the user completes verification.
 """
 
 from __future__ import annotations

@@ -47,7 +47,12 @@ class FilingScheme(enum.StrEnum):
 
 
 class User(Base):
-    """Person identity; email/mobile credential."""
+    """Single user identity — email is the login credential; mobile is optional contact only.
+
+    There is no per-user role and no CA/owner split: the only roles live in
+    user_gst_access (ADMIN/FILER/VIEWER on a GSTIN), and the GSTIN creator is
+    automatically its ADMIN.
+    """
 
     __tablename__ = "users"
     __table_args__ = {"schema": CORE_SCHEMA}
@@ -55,7 +60,7 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4
     )
-    email: Mapped[str | None] = mapped_column(String(255), unique=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     mobile: Mapped[str | None] = mapped_column(String(15), unique=True)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)

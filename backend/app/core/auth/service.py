@@ -43,11 +43,10 @@ async def request_otp(session: AsyncSession, identifier: str, purpose: str) -> d
 async def verify_otp(
     session: AsyncSession, identifier: str, code: str
 ) -> tuple[dict[str, object], dict[str, str]]:
-    """POST /auth/otp/verify — LOGIN only (auto-register is Phase-1 onboarding).
+    """POST /auth/otp/verify — LOGIN or REGISTER.
 
-    New users must exist before login; a LOGIN verify for an unknown user
-    raises InvalidCredentials. Registration creates users in task 0.7's
-    onboarding flow via purpose=REGISTER.
+    New users are auto-created on REGISTER; the login identifier becomes the
+    primary email. Email is the single credential for the unified user model.
     """
     redis = get_redis()
     purpose = await otp_svc.verify_otp(redis, identifier, code)
@@ -58,10 +57,16 @@ async def verify_otp(
     ).scalar_one_or_none()
     if user is None:
         if purpose == "REGISTER":
+            if "@" in identifier:
+                email = identifier.strip().lower()
+                mobile = None
+            else:
+                email = _placeholder_email()
+                mobile = identifier.strip()
             full_name = f"User {identifier[-4:]}"
             user = User(
-                mobile=identifier if "@" not in identifier else _placeholder_mobile(),
-                email=identifier if "@" in identifier else None,
+                mobile=mobile,
+                email=email,
                 full_name=full_name,
                 mobile_verified_at=dt.datetime.now(tz=dt.UTC),
             )
@@ -73,6 +78,12 @@ async def verify_otp(
     access = token_svc.create_access_token(user.id)
     refresh = await token_svc.issue_refresh_family(redis, user.id)
     return _user_out(user), {"access_token": access, "refresh_token": refresh}
+
+
+def _placeholder_email() -> str:
+    """Mobile-first registrations still need a unique email (email is the primary login)."""
+    return f"{uuid.uuid4().hex[:12]}@placeholder.local"
+
 
 
 async def login_with_password(
@@ -98,10 +109,11 @@ async def login_with_password(
 
 
 def _placeholder_mobile() -> str:
-    """Email-first users need a unique non-null mobile (users.mobile NOT NULL).
+    """Email-first users no longer require a synthetic mobile (mobile is optional).
 
     A reserved 0-prefix never collides with real Indian mobiles (10 digits,
-    leading 6-9).
+    leading 6-9). Kept only for backwards compatibility with callers that still
+    expect a mobile fallback.
     """
     return "0" + uuid.uuid4().hex[:13]
 
@@ -185,12 +197,6 @@ async def totp_verify(session: AsyncSession, user_id: uuid.UUID, code: str) -> d
     await session.commit()
     return {"enabled": True}
 
-
-async def require_totp_enabled(session: AsyncSession, user_id: uuid.UUID) -> None:
-    """Firm-join precondition (SECURITY §1); task 0.5's guard calls this."""
-    user = await session.get(User, user_id)
-    if user is None or user.totp_enabled_at is None:
-        raise TotpInvalid("TOTP setup + verification required before firm membership")
 
 
 async def update_user_totp_secret(session: AsyncSession, user_id: uuid.UUID, secret: str) -> None:

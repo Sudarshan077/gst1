@@ -34,11 +34,13 @@ class PasswordLoginIn(BaseModel):
 
 
 class UserOut(BaseModel):
+    """Single user identity returned by /auth/* routes."""
+
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
     id: str
-    mobile: str
-    email: str | None
+    mobile: str | None
+    email: str
     full_name: str
     totp_enabled: bool
 

@@ -78,7 +78,7 @@ async def make_user(
     async with sessionmaker() as session:
         user = User(
             mobile=mobile or "9" + uuid4hex(),
-            email=email,
+            email=email or f"{uuid4hex()}@test.local",
             full_name="Test User",
         )
         session.add(user)
