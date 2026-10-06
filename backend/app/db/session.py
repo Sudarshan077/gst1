@@ -47,7 +47,8 @@ def get_engine() -> AsyncEngine:
 def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     """Session factory bound to the process-wide engine."""
     get_engine()
-    assert _sessionmaker is not None
+    if _sessionmaker is None:
+        raise RuntimeError("sessionmaker not initialized")
     return _sessionmaker
 
 

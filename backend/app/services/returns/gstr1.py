@@ -10,14 +10,15 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Any, List, Optional
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 class Gstr1LineItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
     num: int
-    hsn_sac: Optional[str] = None
+    hsn_sac: str | None = None
     txval_paise: int = 0
     rt: float = 0.0
     iamt_paise: int = 0
@@ -34,13 +35,13 @@ class Gstr1InvoiceItem(BaseModel):
     pos: str
     inv_typ: str = "R"
     rchrg: str = "N"  # Y/N
-    itms: List[Gstr1LineItem]
+    itms: list[Gstr1LineItem]
 
 
 class Gstr1B2BEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ctin: str
-    inv: List[Gstr1InvoiceItem]
+    inv: list[Gstr1InvoiceItem]
 
 
 class Gstr1CdnrItem(BaseModel):
@@ -51,32 +52,32 @@ class Gstr1CdnrItem(BaseModel):
     p_gst: str  # Y/N
     rsn: str
     val: int
-    itms: List[Gstr1LineItem]
+    itms: list[Gstr1LineItem]
 
 
 class Gstr1CdnrEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ctin: str
-    nt: List[Gstr1CdnrItem]
+    nt: list[Gstr1CdnrItem]
 
 
 class Gstr1CdnurItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    inum: Optional[str] = None
-    idt: Optional[str] = None
+    inum: str | None = None
+    idt: str | None = None
     nt_num: str
     nt_dt: str
     nt_typ: str
     rsn: str
     val: int
     pos: str
-    itms: List[Gstr1LineItem]
+    itms: list[Gstr1LineItem]
 
 
 class Gstr1CdnurEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
     typ: str  # B2CL/B2CS
-    nt: List[Gstr1CdnurItem]
+    nt: list[Gstr1CdnurItem]
 
 
 class Gstr1NilEntry(BaseModel):
@@ -99,21 +100,21 @@ class Gstr1DocIssueRange(BaseModel):
 
 class Gstr1DocIssueSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    doc_det: List[Gstr1DocIssueRange]
+    doc_det: list[Gstr1DocIssueRange]
 
 
 class Gstr1Payload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     gstin: str = Field(min_length=15, max_length=15)
     fp: str = Field(min_length=6, max_length=6)
-    gt: Optional[int] = 0
-    cur_gt: Optional[int] = 0
-    b2b: List[Gstr1B2BEntry] = Field(default_factory=list)
-    b2cs: List[Any] = Field(default_factory=list)
-    cdnr: List[Gstr1CdnrEntry] = Field(default_factory=list)
-    cdnur: List[Gstr1CdnurEntry] = Field(default_factory=list)
+    gt: int | None = 0
+    cur_gt: int | None = 0
+    b2b: list[Gstr1B2BEntry] = Field(default_factory=list)
+    b2cs: list[Any] = Field(default_factory=list)
+    cdnr: list[Gstr1CdnrEntry] = Field(default_factory=list)
+    cdnur: list[Gstr1CdnurEntry] = Field(default_factory=list)
     nil: dict[str, Any] = Field(default_factory=dict)
-    doc_issue: Optional[Gstr1DocIssueSection] = None
+    doc_issue: Gstr1DocIssueSection | None = None
 
 
 def generate_nil_gstr1(gstin: str, fp: str) -> dict[str, Any]:
@@ -129,26 +130,44 @@ def generate_nil_gstr1(gstin: str, fp: str) -> dict[str, Any]:
         cdnur=[],
         nil={
             "inv": [
-                {"exem_amt_paise": 0, "nil_amt_paise": 0, "ngsup_amt_paise": 0, "sply_cd": "INTRA_NIL"},
-                {"exem_amt_paise": 0, "nil_amt_paise": 0, "ngsup_amt_paise": 0, "sply_cd": "INTER_NIL"},
+                {
+                    "exem_amt_paise": 0,
+                    "nil_amt_paise": 0,
+                    "ngsup_amt_paise": 0,
+                    "sply_cd": "INTRA_NIL",
+                },
+                {
+                    "exem_amt_paise": 0,
+                    "nil_amt_paise": 0,
+                    "ngsup_amt_paise": 0,
+                    "sply_cd": "INTER_NIL",
+                },
             ]
         },
         doc_issue=Gstr1DocIssueSection(
             doc_det=[
-                Gstr1DocIssueRange(num=1, from_num="1", to_num="1", tot_num=1, cancel=0, net_issue=1)
+                Gstr1DocIssueRange(
+                    num=1,
+                    from_num="1",
+                    to_num="1",
+                    tot_num=1,
+                    cancel=0,
+                    net_issue=1,
+                )
             ]
         )
     )
     return payload.model_dump()
 
 
-def validate_gstr1_payload(data: dict[str, Any]) -> tuple[bool, Optional[str]]:
+def validate_gstr1_payload(data: dict[str, Any]) -> tuple[bool, str | None]:
     """Self-validator: validates dict against the pinned Gstr1Payload schema."""
     try:
         Gstr1Payload.model_validate(data)
         return True, None
     except ValidationError as e:
         return False, str(e)
+
 
 
 def build_gstr1_from_invoices(
@@ -185,7 +204,11 @@ def build_gstr1_from_invoices(
 
         inv_item = Gstr1InvoiceItem(
             inum=inv.invoice_no,
-            idt=inv.invoice_date.strftime("%d-%m-%Y") if isinstance(inv.invoice_date, date) else str(inv.invoice_date),
+            idt=(
+                inv.invoice_date.strftime("%d-%m-%Y")
+                if isinstance(inv.invoice_date, date)
+                else str(inv.invoice_date)
+            ),
             val_paise=inv.total_value_minor,
             pos=inv.place_of_supply,
             inv_typ=str(inv.inv_typ),
@@ -197,8 +220,16 @@ def build_gstr1_from_invoices(
     for note in notes:
         # Calculate rate
         total_tax = note.cgst_minor + note.sgst_minor + note.igst_minor
-        rate = float((Decimal(total_tax) / Decimal(note.taxable_value_minor) * 100).quantize(Decimal("0.01"))) if note.taxable_value_minor > 0 else 0.0
-        
+        rate = (
+            float(
+                (Decimal(total_tax) / Decimal(note.taxable_value_minor) * 100).quantize(
+                    Decimal("0.01")
+                )
+            )
+            if note.taxable_value_minor > 0
+            else 0.0
+        )
+
         note_line = Gstr1LineItem(
             num=1,
             txval_paise=note.taxable_value_minor,
@@ -208,7 +239,7 @@ def build_gstr1_from_invoices(
             samt_paise=note.sgst_minor,
             csamt_paise=note.cess_minor,
         )
-        
+
         note_item = Gstr1CdnrItem(
             nt_num=note.note_no,
             nt_dt=note.note_date.strftime("%d-%m-%Y"),
@@ -218,12 +249,12 @@ def build_gstr1_from_invoices(
             val=note.taxable_value_minor,
             itms=[note_line]
         )
-        
-        if note.buyer_gstin: # CDNR
+
+        if note.buyer_gstin:  # CDNR
             if note.buyer_gstin not in cdnr_map:
                 cdnr_map[note.buyer_gstin] = []
             cdnr_map[note.buyer_gstin].append(note_item)
-        else: # CDNUR
+        else:  # CDNUR
             cdnur_item = Gstr1CdnurItem(
                 nt_num=note.note_no,
                 nt_dt=note.note_date.strftime("%d-%m-%Y"),
@@ -242,7 +273,7 @@ def build_gstr1_from_invoices(
         Gstr1CdnrEntry(ctin=ctin, nt=nts) for ctin, nts in cdnr_map.items()
     ]
     cdnur_entry = Gstr1CdnurEntry(typ="B2CL", nt=cdnur_list) if cdnur_list else None
-    
+
     payload = Gstr1Payload(
         gstin=gstin,
         fp=fp,
@@ -258,7 +289,7 @@ def build_gstr1_from_invoices(
                     to_num=f"INV-{len(invoices)}",
                     tot_num=len(invoices),
                     cancel=0,
-                    net_issue=len(invoices)
+                    net_issue=len(invoices),
                 )
             ]
         ) if invoices else None

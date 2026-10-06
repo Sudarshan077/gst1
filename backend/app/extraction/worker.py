@@ -73,7 +73,8 @@ async def _persist_result(
 
     from app.extraction.models import AutoConfirmStatus, ExtractionResult
 
-    assert isinstance(result, ExtractionResult)
+    if not isinstance(result, ExtractionResult):
+        raise TypeError(f"expected ExtractionResult, got {type(result).__name__}")
     job.raw_llm_output = result.document.model_dump(mode="json") if result.document else None
     job.llm_model = result.llm_model
     job.llm_tokens_in = result.llm_tokens_in

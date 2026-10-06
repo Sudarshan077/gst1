@@ -6,9 +6,13 @@ Async redis on the bootstrap_stack.py port :6380. Tests swap in fakeredis via
 
 from __future__ import annotations
 
+import logging
+
 from redis.asyncio import ConnectionPool, Redis
 
 from app.config import get_settings
+
+_LOGGER = logging.getLogger(__name__)
 
 _pool: ConnectionPool | None = None
 _client: Redis | None = None
@@ -30,8 +34,8 @@ async def _close_client() -> None:
     if _client is not None:
         try:
             await _client.aclose()
-        except Exception:  # noqa: BLE001, S110
-            pass
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("redis client close failed", exc_info=True)
         _client = None
 
 
@@ -40,8 +44,8 @@ async def _close_pool() -> None:
     if _pool is not None:
         try:
             await _pool.disconnect()
-        except Exception:  # noqa: BLE001, S110
-            pass
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("redis pool disconnect failed", exc_info=True)
         _pool = None
 
 

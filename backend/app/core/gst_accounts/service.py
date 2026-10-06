@@ -312,7 +312,7 @@ async def update_collaborator(
 ) -> dict[str, Any]:
     """PATCH /gst-accounts/{gstin}/collaborators/{userId} — update role."""
     account = await get_gst_account(session, gstin)
-    
+
     grant = (
         await session.execute(
             select(UserGstAccess).where(
@@ -326,7 +326,7 @@ async def update_collaborator(
 
     old_role = grant.role
     grant.role = new_role
-    
+
     await audit(
         session,
         action="GSTIN_ACCESS_UPDATED",

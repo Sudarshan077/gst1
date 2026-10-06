@@ -12,13 +12,23 @@ from tests.gstin_fixtures import make_gstin
 
 
 @pytest.mark.asyncio
-async def test_live_irp_credential_gate(client: AsyncClient, api_sessionmaker: SessionMaker) -> None:
+async def test_live_irp_credential_gate(
+    client: AsyncClient, api_sessionmaker: SessionMaker
+) -> None:
     auth_data = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {auth_data['access_token']}"}
     gstin = make_gstin()
 
-    await client.post("/api/v1/gst-accounts", headers=headers, json={"gstin": gstin, "legal_name": "Test Company"})
-    await client.patch(f"/api/v1/gst-accounts/{gstin}", headers=headers, json={"aato_minor": 6000000000})
+    await client.post(
+        "/api/v1/gst-accounts",
+        headers=headers,
+        json={"gstin": gstin, "legal_name": "Test Company"},
+    )
+    await client.patch(
+        f"/api/v1/gst-accounts/{gstin}",
+        headers=headers,
+        json={"aato_minor": 6000000000},
+    )
 
     inv_id = uuid.uuid4()
     async with api_sessionmaker() as session:
@@ -46,7 +56,10 @@ async def test_live_irp_credential_gate(client: AsyncClient, api_sessionmaker: S
     async with api_sessionmaker() as session:
         with pytest.raises(Exception) as exc_info:
             await irp_live_adapter.generate_live_irn(session, inv_id, user_id)
-        assert "irp_sandbox_mode is True" in str(exc_info.value) or "ServiceError" in type(exc_info.value).__name__
+        assert (
+            "irp_sandbox_mode is True" in str(exc_info.value)
+            or "ServiceError" in type(exc_info.value).__name__
+        )
 
     # Test that when sandbox_mode=False but credentials are default/missing, it raises UNAUTHORIZED
     settings.irp_sandbox_mode = False
@@ -56,7 +69,11 @@ async def test_live_irp_credential_gate(client: AsyncClient, api_sessionmaker: S
         with pytest.raises(Exception) as exc_info:
             await irp_live_adapter.generate_live_irn(session, inv_id, user_id)
         # Should raise due to missing/default credentials
-        assert "credentials missing" in str(exc_info.value).lower() or "UNAUTHORIZED" in str(exc_info.value) or "ServiceError" in type(exc_info.value).__name__
+        assert (
+            "credentials missing" in str(exc_info.value).lower()
+            or "UNAUTHORIZED" in str(exc_info.value)
+            or "ServiceError" in type(exc_info.value).__name__
+        )
 
     # Reset settings back to default sandbox
     settings.irp_sandbox_mode = True

@@ -1,15 +1,12 @@
-import pytest
-from httpx import AsyncClient
-from tests.auth_helpers import register_and_login, make_mobile
-from tests.gstin_fixtures import make_gstin
+from datetime import date
 
 import pytest
+from app.db.models.gst import Invoice, InvoiceDirection, InvoiceStatus, SupplyType
 from httpx import AsyncClient
-from tests.auth_helpers import register_and_login, make_mobile
+
+from tests.auth_helpers import make_mobile, register_and_login
 from tests.gstin_fixtures import make_gstin
-from sqlalchemy.ext.asyncio import async_sessionmaker
-from app.db.models.gst import Invoice, InvoiceDirection, SupplyType, InvoiceStatus
-from datetime import date
+
 
 @pytest.mark.asyncio
 async def test_gstr2b_import_and_reconcile(client: AsyncClient, api_sessionmaker) -> None:
@@ -19,18 +16,22 @@ async def test_gstr2b_import_and_reconcile(client: AsyncClient, api_sessionmaker
     token = auth_data["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     gstin = make_gstin()
-    
-    await client.post("/api/v1/gst-accounts", headers=headers, json={"gstin": gstin, "legal_name": "Test"})
-    
+
+    await client.post(
+        "/api/v1/gst-accounts",
+        headers=headers,
+        json={"gstin": gstin, "legal_name": "Test"},
+    )
+
     fp = "102026"
-    
+
     # Seed local purchase invoices to test all 5 reconciliation statuses:
     # 1. MATCHED: Exact match in 2B and books
     # 2. PROBABLE: Fuzzy match (amount mismatch or typo in invoice no)
     # 3. UNMATCHED: Same invoice no, but completely different value
     # 4. MISSING_IN_2B: Present in books, missing in 2B
     # 5. MISSING_IN_BOOKS: Present in 2B, missing in books
-    
+
     async with api_sessionmaker() as session:
         inv_matched = Invoice(
             gstin=gstin, fp=fp, direction=InvoiceDirection.PURCHASE,
@@ -108,14 +109,21 @@ async def test_gstr2b_import_and_reconcile(client: AsyncClient, api_sessionmaker
             }
         ]
     }
-    response = await client.post(f"/api/v1/gst-accounts/{gstin}/months/{fp}/gstr2b/import", headers=headers, json={"payload": payload})
+    response = await client.post(
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/gstr2b/import",
+        headers=headers,
+        json={"payload": payload},
+    )
     assert response.status_code == 200
-    
+
     # 3. Reconcile
-    response = await client.post(f"/api/v1/gst-accounts/{gstin}/months/{fp}/itc/reconcile", headers=headers)
+    response = await client.post(
+        f"/api/v1/gst-accounts/{gstin}/months/{fp}/itc/reconcile",
+        headers=headers,
+    )
     assert response.status_code == 200
     data = response.json()["data"]
-    
+
     # Verify all 5 statuses are present
     statuses = [item["match_status"] for item in data]
     assert "MATCHED" in statuses

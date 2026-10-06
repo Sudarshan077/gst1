@@ -24,7 +24,9 @@ async def create_gstr1a_amendments(
     # 1. Check filing period is FILED
     period = await session.get(FilingPeriod, (gstin, fp))
     if period is None or period.status != FilingStatus.FILED:
-        raise ServiceError("GSTR-1A amendments require a filed return period", 422, "PERIOD_NOT_FILED")
+        raise ServiceError(
+            "GSTR-1A amendments require a filed return period", 422, "PERIOD_NOT_FILED"
+        )
 
     # 2. Find latest Gstr1Export for gstin & fp
     export_result = await session.execute(

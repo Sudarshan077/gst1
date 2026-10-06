@@ -4,20 +4,20 @@ based on filing scheme and state code, manages filing periods, and fires reminde
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Any
-from sqlalchemy import select, and_, func
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.errors import ServiceError
+from app.db.models.core import GstAccount, UserGstAccess
+from app.db.models.extraction import Document
 from app.db.models.gst import (
     FilingPeriod,
     FilingStatus,
     Invoice,
     Notification,
 )
-from app.db.models.extraction import Document
-from app.db.models.core import GstAccount, UserGstAccess
-from app.api.errors import ServiceError
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Category 1 States / UTs for QRMP GSTR-3B (due 22nd of month succeeding quarter)
 CATEGORY_1_STATES = {

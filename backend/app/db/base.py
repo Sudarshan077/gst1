@@ -32,6 +32,6 @@ def all_models() -> list[ModuleType]:
 
     Call this before alembic autogenerate or create_all.
     """
-    from app.db.models import core, extraction, gst, dpdp  # noqa: F401
+    from app.db.models import core, dpdp, extraction, gst  # noqa: F401
 
     return [core, extraction, gst, dpdp]

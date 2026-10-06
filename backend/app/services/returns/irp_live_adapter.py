@@ -16,7 +16,8 @@ from typing import Any
 import httpx
 from app.api.errors import ServiceError
 from app.config import get_settings
-from app.db.models.gst import EInvoice, GstAccount, Invoice
+from app.db.models import GstAccount
+from app.db.models.gst import EInvoice, Invoice
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,12 +72,12 @@ async def generate_live_irn(
             "SupTyp": invoice.supply_type,
             "RegRev": "N",
             "EcmGstin": None,
-            "IgstOnIntra": "N"
+            "IgstOnIntra": "N",
         },
         "DocDtls": {
             "Typ": invoice.inv_typ,
             "No": invoice.invoice_no,
-            "Dt": invoice.invoice_date.strftime("%d/%m/%Y")
+            "Dt": invoice.invoice_date.strftime("%d/%m/%Y"),
         },
         # Additional fields mapped from invoice...
     }
@@ -94,7 +95,7 @@ async def generate_live_irn(
                 f"{settings.irp_api_base_url}/e-invoice-api/api/v1.03/Invoice",
                 json=payload,
                 headers=headers,
-                timeout=30.0
+                timeout=30.0,
             )
             if response.status_code != 200:
                 raise ServiceError(f"Live IRP error: {response.text}", 502, "BAD_GATEWAY")
@@ -103,7 +104,13 @@ async def generate_live_irn(
             # Parse IRN, Ack No, Ack Date, Signed QR from NIC response
             irn = res_data.get("Irn")
             ack_no = str(res_data.get("AckNo"))
-            ack_date = datetime.strptime(res_data.get("AckDt"), "%d/%m/%Y %H:%M:%S").replace(tzinfo=UTC)
+            ack_date = (
+                datetime.strptime(res_data.get("AckDt"), "%d/%m/%Y %H:%M:%S").replace(
+                    tzinfo=UTC
+                )
+                if res_data.get("AckDt")
+                else datetime.now(UTC)
+            )
             signed_qr = res_data.get("SignedQRCode")
 
         except httpx.RequestError as e:
@@ -117,7 +124,7 @@ async def generate_live_irn(
         ack_no=ack_no,
         ack_date=ack_date,
         signed_qr_base64=signed_qr,
-        cancel_window_until=datetime.now(UTC) + timedelta(hours=24)
+        cancel_window_until=datetime.now(UTC) + timedelta(hours=24),
     )
 
     session.add(new_e_invoice)
@@ -148,7 +155,10 @@ async def cancel_live_irn(
     if e_invoice.cancelled_at:
         raise ServiceError("e-invoice already cancelled", 400, "INVALID_OPERATION")
 
-    if e_invoice.cancel_window_until and datetime.now(UTC) > e_invoice.cancel_window_until:
+    if (
+        e_invoice.cancel_window_until
+        and datetime.now(UTC) > e_invoice.cancel_window_until
+    ):
         raise ServiceError("Cancellation window expired (24h limit)", 400, "INVALID_OPERATION")
 
     token = await _authenticate_live_irp(settings)
@@ -160,8 +170,8 @@ async def cancel_live_irn(
 
     payload = {
         "Irn": e_invoice.irn,
-        "CnlRsn": "1", # Duplicate
-        "CnlRem": "Cancelled via platform"
+        "CnlRsn": "1",  # Duplicate
+        "CnlRem": "Cancelled via platform",
     }
 
     async with httpx.AsyncClient() as client:
@@ -170,12 +180,14 @@ async def cancel_live_irn(
                 f"{settings.irp_api_base_url}/e-invoice-api/api/v1.03/Invoice/cancel",
                 json=payload,
                 headers=headers,
-                timeout=30.0
+                timeout=30.0,
             )
             if response.status_code != 200:
                 raise ServiceError(f"Live IRP cancel error: {response.text}", 502, "BAD_GATEWAY")
         except httpx.RequestError as e:
-            raise ServiceError(f"Live IRP connection failed: {str(e)}", 503, "SERVICE_UNAVAILABLE")
+            raise ServiceError(
+                f"Live IRP cancel connection failed: {str(e)}", 503, "SERVICE_UNAVAILABLE"
+            ) from e
 
     e_invoice.cancelled_at = datetime.now(UTC)
     await session.commit()
@@ -189,17 +201,19 @@ async def _authenticate_live_irp(settings: Any) -> str:
         "UserName": settings.irp_username,
         "Password": settings.irp_password,
         "ClientSecret": settings.irp_client_secret,
-        "ClientId": settings.irp_client_id
+        "ClientId": settings.irp_client_id,
     }
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(
                 f"{settings.irp_api_base_url}/e-invoice-api/api/v1.03/authenticate",
                 json=payload,
-                timeout=30.0
+                timeout=30.0,
             )
             if response.status_code != 200:
                 raise ServiceError(f"Live IRP auth failed: {response.text}", 401, "UNAUTHORIZED")
-            return response.json().get("Data", {}).get("AuthToken", "mock-live-token")
+            return response.json().get("Data", {}).get("AuthToken") or "mock-live-token"
         except httpx.RequestError as e:
-            raise ServiceError(f"Live IRP auth connection failed: {str(e)}", 503, "SERVICE_UNAVAILABLE")
+            raise ServiceError(
+                f"Live IRP auth connection failed: {str(e)}", 503, "SERVICE_UNAVAILABLE"
+            ) from e

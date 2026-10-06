@@ -1,10 +1,13 @@
-import pytest
 import uuid
-from httpx import AsyncClient
 from datetime import date
-from tests.auth_helpers import SessionMaker, register_and_login, make_mobile
+
+import pytest
+from app.db.models.gst import Invoice, InvoiceDirection, InvoiceStatus, InvType, SupplyType
+from httpx import AsyncClient
+
+from tests.auth_helpers import SessionMaker, make_mobile, register_and_login
 from tests.gstin_fixtures import make_gstin
-from app.db.models.gst import Invoice, InvoiceDirection, InvoiceStatus, SupplyType, InvType
+
 
 @pytest.mark.asyncio
 async def test_generate_and_cancel_irn(client: AsyncClient, api_sessionmaker: SessionMaker) -> None:
@@ -12,10 +15,18 @@ async def test_generate_and_cancel_irn(client: AsyncClient, api_sessionmaker: Se
     auth_data = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {auth_data['access_token']}"}
     gstin = make_gstin()
-    
+
     # Create GST Account
-    await client.post("/api/v1/gst-accounts", headers=headers, json={"gstin": gstin, "legal_name": "Test Company"})
-    await client.patch(f"/api/v1/gst-accounts/{gstin}", headers=headers, json={"aato_minor": 6000000000})
+    await client.post(
+        "/api/v1/gst-accounts",
+        headers=headers,
+        json={"gstin": gstin, "legal_name": "Test Company"},
+    )
+    await client.patch(
+        f"/api/v1/gst-accounts/{gstin}",
+        headers=headers,
+        json={"aato_minor": 6000000000},
+    )
 
     # Manually insert an Invoice
     inv_id = uuid.uuid4()
@@ -57,10 +68,18 @@ async def test_irn_applicable_gate(client: AsyncClient, api_sessionmaker: Sessio
     auth_data = await register_and_login(client, make_mobile())
     headers = {"Authorization": f"Bearer {auth_data['access_token']}"}
     gstin = make_gstin()
-    
+
     # Create GST Account with irn_applicable = False
-    await client.post("/api/v1/gst-accounts", headers=headers, json={"gstin": gstin, "legal_name": "Test Company"})
-    await client.patch(f"/api/v1/gst-accounts/{gstin}", headers=headers, json={"aato_minor": 1000000000})
+    await client.post(
+        "/api/v1/gst-accounts",
+        headers=headers,
+        json={"gstin": gstin, "legal_name": "Test Company"},
+    )
+    await client.patch(
+        f"/api/v1/gst-accounts/{gstin}",
+        headers=headers,
+        json={"aato_minor": 1000000000},
+    )
 
     # Manually insert an Invoice
     inv_id = uuid.uuid4()

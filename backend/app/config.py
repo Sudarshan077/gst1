@@ -52,19 +52,19 @@ class Settings(BaseSettings):
     # Upload guard per SECURITY_AND_ACCESS.md §6.
     max_document_pages: int = 50
 
-    # GSP API
+    # GSP API — dev placeholder values; prod MUST override via env vars.
     gsp_client_id: str = "dev-client-id"
-    gsp_client_secret: str = "dev-client-secret"
+    gsp_client_secret: str = "dev-client-secret"  # noqa: S105
     gsp_username: str = "dev-username"
-    gsp_password: str = "dev-password"
+    gsp_password: str = "dev-password"  # noqa: S105
     gsp_sandbox_mode: bool = True
     gsp_api_base_url: str = "https://sandbox.gst.gov.in"
 
-    # IRP API
+    # IRP API — dev placeholder values; prod MUST override via env vars.
     irp_client_id: str = "dev-client-id"
-    irp_client_secret: str = "dev-client-secret"
+    irp_client_secret: str = "dev-client-secret"  # noqa: S105
     irp_username: str = "dev-username"
-    irp_password: str = "dev-password"
+    irp_password: str = "dev-password"  # noqa: S105
     irp_sandbox_mode: bool = True
     irp_api_base_url: str = "https://einvoice1-trial.nic.in"
 

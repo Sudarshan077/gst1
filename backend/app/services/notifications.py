@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.db.models.core import User
 from app.db.models.gst import Notification
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def create_notification(

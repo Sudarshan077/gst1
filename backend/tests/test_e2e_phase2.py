@@ -1,12 +1,11 @@
-import pytest
-import httpx
 import io
-import asyncio
+
+import httpx
+import pytest
 from PIL import Image
-from datetime import date
-from app.db.models.gst import FilingStatus
+
 from tests.v4_helpers import seed_account, seed_open_period
-from tests.gstin_fixtures import make_gstin
+
 
 @pytest.mark.asyncio
 async def test_full_return_journey(client: httpx.AsyncClient, api_sessionmaker):
@@ -15,9 +14,9 @@ async def test_full_return_journey(client: httpx.AsyncClient, api_sessionmaker):
     gstin = account.gstin
     fp = "092026"
     await seed_open_period(api_sessionmaker, gstin, fp)
-    
+
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    
+
     # 2. Upload (Mock)
     img = Image.new("RGB", (1, 1), color="red")
     buf = io.BytesIO()
@@ -32,18 +31,19 @@ async def test_full_return_journey(client: httpx.AsyncClient, api_sessionmaker):
     )
     assert resp.status_code == 200, resp.text
     doc_id = resp.json()["data"]["id"]
-    
+
     # 3. Update existing Job and add Draft
     async with api_sessionmaker() as session:
-        from app.db.models.extraction import ExtractionJob, JobStatus, InvoiceDraft
-        from tests.gstin_fixtures import make_gstin
+        from app.db.models.extraction import ExtractionJob, InvoiceDraft, JobStatus
         from sqlalchemy import select
-        
+
+        from tests.gstin_fixtures import make_gstin
+
         job = (await session.execute(
             select(ExtractionJob).where(ExtractionJob.document_id == doc_id)
         )).scalar_one()
         job.status = JobStatus.EXTRACTED
-        
+
         draft = InvoiceDraft(
             extraction_job_id=job.id,
             gstin=gstin,
@@ -81,33 +81,33 @@ async def test_full_return_journey(client: httpx.AsyncClient, api_sessionmaker):
         )
         session.add(draft)
         await session.commit()
-    
+
     resp = await client.post(
         f"/api/v1/documents/{doc_id}/confirm",
         headers=headers
     )
     assert resp.status_code == 200, resp.text
-    
+
     # 4. Prepare
     url = f"/api/v1/gst-accounts/{gstin}/months/{fp}/gstr1/prepare"
     print(f"URL: {url}")
     resp = await client.post(url, headers=headers)
     assert resp.status_code == 200, resp.text
-    
+
     # 5. Generate
     resp = await client.post(
         f"/api/v1/gst-accounts/{gstin}/months/{fp}/gstr1/generate",
         headers=headers
     )
     assert resp.status_code == 200, resp.text
-    
+
     # 6. File
     resp = await client.post(
         f"/api/v1/gst-accounts/{gstin}/months/{fp}/filed",
         headers=headers
     )
     assert resp.status_code == 200, resp.text
-    
+
     # 7. 1A
     resp = await client.post(
         f"/api/v1/gst-accounts/{gstin}/months/{fp}/gstr1a",

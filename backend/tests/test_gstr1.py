@@ -7,19 +7,27 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-import pytest
 
 from app.services.returns.gstr1 import (
+    build_gstr1_from_invoices,
     generate_nil_gstr1,
     validate_gstr1_payload,
-    build_gstr1_from_invoices,
-    Gstr1Payload,
 )
+
 from tests.gstin_fixtures import make_gstin
 
 
 class MockInvoiceLine:
-    def __init__(self, hsn_sac, gst_rate, taxable_value_minor, cgst_minor, sgst_minor, igst_minor, cess_minor=0):
+    def __init__(
+        self,
+        hsn_sac,
+        gst_rate,
+        taxable_value_minor,
+        cgst_minor,
+        sgst_minor,
+        igst_minor,
+        cess_minor=0,
+    ):
         self.hsn_sac = hsn_sac
         self.gst_rate = Decimal(str(gst_rate))
         self.taxable_value_minor = taxable_value_minor
@@ -30,7 +38,17 @@ class MockInvoiceLine:
 
 
 class MockInvoice:
-    def __init__(self, invoice_no, invoice_date, total_value_minor, place_of_supply, buyer_gstin, lines, inv_typ="R", rchrg=False):
+    def __init__(
+        self,
+        invoice_no,
+        invoice_date,
+        total_value_minor,
+        place_of_supply,
+        buyer_gstin,
+        lines,
+        inv_typ="R",
+        rchrg=False,
+    ):
         self.invoice_no = invoice_no
         self.invoice_date = invoice_date
         self.total_value_minor = total_value_minor
@@ -42,7 +60,18 @@ class MockInvoice:
 
 
 class MockNote:
-    def __init__(self, note_no, note_date, taxable_value_minor, cgst_minor, sgst_minor, igst_minor, note_type, reason_code, buyer_gstin=None):
+    def __init__(
+        self,
+        note_no,
+        note_date,
+        taxable_value_minor,
+        cgst_minor,
+        sgst_minor,
+        igst_minor,
+        note_type,
+        reason_code,
+        buyer_gstin=None,
+    ):
         self.note_no = note_no
         self.note_date = note_date
         self.taxable_value_minor = taxable_value_minor
@@ -50,7 +79,7 @@ class MockNote:
         self.sgst_minor = sgst_minor
         self.igst_minor = igst_minor
         self.cess_minor = 0
-        self.note_type = note_type # CDN/DBN
+        self.note_type = note_type  # CDN/DBN
         self.reason_code = reason_code
         self.buyer_gstin = buyer_gstin
 
@@ -58,7 +87,7 @@ class MockNote:
 def test_nil_gstr1_generation_and_validation():
     gstin = make_gstin(state_code="29")
     fp = "092026"
-    
+
     nil_json = generate_nil_gstr1(gstin, fp)
     assert nil_json["gstin"] == gstin
     assert nil_json["fp"] == fp
@@ -93,7 +122,7 @@ def test_gstr1_generator_with_invoices():
     )
 
     payload = build_gstr1_from_invoices(supplier_gstin, fp, [inv])
-    
+
     valid, err = validate_gstr1_payload(payload)
     assert valid is True, f"Validation failed: {err}"
     assert payload["gstin"] == supplier_gstin
@@ -109,7 +138,7 @@ def test_gstr1_generator_with_notes():
     supplier_gstin = make_gstin(state_code="29")
     buyer_gstin = make_gstin(state_code="29")
     fp = "092026"
-    
+
     note = MockNote(
         note_no="CDN-001",
         note_date=date(2026, 9, 20),
@@ -119,11 +148,11 @@ def test_gstr1_generator_with_notes():
         igst_minor=0,
         note_type="CDN",
         reason_code="Sales Return",
-        buyer_gstin=buyer_gstin
+        buyer_gstin=buyer_gstin,
     )
-    
+
     payload = build_gstr1_from_invoices(supplier_gstin, fp, [], notes=[note])
-    
+
     valid, err = validate_gstr1_payload(payload)
     assert valid is True, f"Validation failed: {err}"
     assert len(payload["cdnr"]) == 1
