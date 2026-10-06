@@ -46,7 +46,7 @@ def check_gsp_irp_onboarding():
     """Gate 2: GSP & IRP Free-Tier Developer Onboarding."""
     print("\n=== Gate 2: GSP & IRP Onboarding ===")
     tf = os.path.join(BACKEND, "tests", "test_gsp_irp_onboarding.py")
-    ok = run(["uv", "run", "--project", BACKEND, "pytest", tf, "-v"], cwd=BACKEND)
+    ok = run(["uv", "run", "--project", BACKEND, "pytest", tf, "-v", "--no-cov"], cwd=BACKEND)
     if not ok:
         print("FAIL: test_gsp_irp_onboarding.py failed")
     return ok
@@ -93,7 +93,7 @@ def check_dpdp():
     """Gate 4: DPDP compliance."""
     print("\n=== Gate 4: DPDP Compliance ===")
     tf = os.path.join(BACKEND, "tests", "test_dpdp.py")
-    ok = run(["uv", "run", "--project", BACKEND, "pytest", tf, "-v"], cwd=BACKEND)
+    ok = run(["uv", "run", "--project", BACKEND, "pytest", tf, "-v", "--no-cov"], cwd=BACKEND)
     if not ok:
         print("FAIL: test_dpdp.py failed")
     return ok
@@ -103,7 +103,7 @@ def check_full_suite_serial():
     """Gate 5a: Full regression — serial."""
     print("\n=== Gate 5a: Full Suite (serial) ===")
     r = subprocess.run(
-        ["uv", "run", "--project", BACKEND, "pytest", "tests/", "-q", "--cov=app"],
+        ["uv", "run", "--project", BACKEND, "pytest", "tests/", "-q", "--cov=app", "--cov-fail-under=80"],
         cwd=BACKEND,
         capture_output=True,
         text=True,
@@ -112,8 +112,7 @@ def check_full_suite_serial():
     if r.returncode != 0:
         print("FAIL: serial suite failed")
         return False
-    if "Required test coverage of 80%" in r.stdout:
-        print("PASS: coverage gate enforced")
+    print("PASS: serial suite green")
     return True
 
 
@@ -121,7 +120,7 @@ def check_full_suite_parallel():
     """Gate 5b: Full regression — parallel xdist."""
     print("\n=== Gate 5b: Full Suite (parallel -n 4) ===")
     r = subprocess.run(
-        ["uv", "run", "--project", BACKEND, "pytest", "tests/", "-n", "4", "-q"],
+        ["uv", "run", "--project", BACKEND, "pytest", "tests/", "-n", "4", "-q", "--cov=app", "--cov-fail-under=80"],
         cwd=BACKEND,
         capture_output=True,
         text=True,
@@ -130,6 +129,7 @@ def check_full_suite_parallel():
     if r.returncode != 0:
         print("FAIL: parallel suite failed")
         return False
+    print("PASS: parallel suite green")
     return True
 
 
