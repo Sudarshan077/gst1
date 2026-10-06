@@ -35,15 +35,11 @@ class OtpRequest:
 
 
 def validate_identifier(identifier: str) -> str:
-    """Accept a 10-13 digit mobile or an email; else 422."""
-    digits = identifier.replace("+", "").strip()
-    if digits.isdigit() and 10 <= len(digits) <= 13:
-        return identifier.strip()
-    if "@" in identifier and "." in identifier.split("@")[-1]:
-        return identifier.strip()
-    raise IdentifierInvalid(
-        "identifier must be a mobile number or email address"
-    )
+    """Accept only an email address; mobile numbers are not allowed."""
+    stripped = identifier.strip().lower()
+    if "@" in stripped and "." in stripped.split("@")[-1]:
+        return stripped
+    raise IdentifierInvalid("identifier must be an email address")
 
 
 def _otp_key(identifier: str) -> str:

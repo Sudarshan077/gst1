@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import random
-import string
 import sys
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -72,12 +70,11 @@ async def client(
 
 
 async def make_user(
-    sessionmaker: SessionMaker, mobile: str | None = None, email: str | None = None
+    sessionmaker: SessionMaker, email: str | None = None
 ) -> User:
     """Seed a user row directly (no OTP round-trip needed for /me etc.)."""
     async with sessionmaker() as session:
         user = User(
-            mobile=mobile or "9" + uuid4hex(),
             email=email or f"{uuid4hex()}@test.local",
             full_name="Test User",
         )
@@ -87,30 +84,23 @@ async def make_user(
         return user
 
 
-def make_mobile() -> str:
-    """Return a valid 10-digit mobile string for OTP tests."""
-    # Test-only random digits; not used for cryptographic material.
-    return "9" + "".join(random.choices(string.digits, k=9))  # noqa: S311
+def make_email() -> str:
+    """Return a unique email string for OTP tests."""
+    # Test-only random local part; not used for cryptographic material.
+    return f"test_{uuid4hex()}@example.com"
 
 
-def uuid4hex() -> str:
-    """9-digit-safe mobile suffix (import kept local for module hygiene)."""
-    import uuid
-
-    return uuid.uuid4().hex[:9]
-
-
-async def register_and_login(client: AsyncClient, mobile: str) -> dict[str, Any]:
+async def register_and_login(client: AsyncClient, email: str) -> dict[str, Any]:
     """Full OTP journey: request (dev echo) -> verify -> token pair."""
     req = await client.post(
         "/api/v1/auth/otp/request",
-        json={"identifier": mobile, "purpose": "REGISTER"},
+        json={"identifier": email, "purpose": "REGISTER"},
     )
     assert req.status_code == 200, req.text
     dev_otp = req.json()["data"]["dev_otp"]
     assert dev_otp, "dev mode must echo dev_otp for tests"
     ver = await client.post(
-        "/api/v1/auth/otp/verify", json={"identifier": mobile, "otp": dev_otp}
+        "/api/v1/auth/otp/verify", json={"identifier": email, "otp": dev_otp}
     )
     assert ver.status_code == 200, ver.text
     envelope: dict[str, Any] = ver.json()
@@ -118,12 +108,23 @@ async def register_and_login(client: AsyncClient, mobile: str) -> dict[str, Any]
     return data
 
 
+# Back-compat aliases for test modules imported before the rename.
+_register_and_login = register_and_login
+_make_user = make_user
+
+# Deprecated: mobile-based fixtures are no longer valid under the email-only
+# auth model. Kept as a thin wrapper around make_email() so unrelated suites
+# that still import the name continue to get a usable identifier.
+make_mobile = make_email
+
+
 def redis_view(fake_redis: fakeredis.aioredis.FakeRedis) -> Redis:
     """Typing shim: fakeredis client used through the async API."""
     return fake_redis
 
 
-# Back-compat aliases for test modules imported before the rename.
-_register_and_login = register_and_login
-_make_user = make_user
-_redis_sync_view = redis_view
+def uuid4hex() -> str:
+    """9-character hex suffix for unique local parts."""
+    import uuid
+
+    return uuid.uuid4().hex[:9]

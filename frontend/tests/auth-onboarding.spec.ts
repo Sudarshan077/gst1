@@ -3,17 +3,14 @@
  * VERIFICATION_SWEEP.md Lens 2). Backend (8084) + frontend dev server (9094)
  * must be running; the backend needs PG:5436 + Redis:6380 (bootstrap_stack.py).
  *
- * Synthetic identities only — mobile numbers use the reserved 0-prefix test
- * range; no real PII.
+ * Synthetic identities only — random email addresses; no real PII.
  */
 import { expect, test, Page } from "@playwright/test";
 
 const BACKEND = "http://127.0.0.1:8084";
 
-function uniqueMobile(): string {
-  // 13 digits with the reserved 0-prefix (validate_identifier: 10-13 digits);
-  // timestamp-derived so concurrent tests never share an identifier.
-  return `0${String(Date.now()).slice(-12)}`;
+function uniqueEmail(): string {
+  return `test_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
 
 async function requestOtp(identifier: string, purpose: string) {
@@ -54,15 +51,15 @@ test.describe("unified onboarding", () => {
   test("register has no role pick and lands on the unified shell", async ({
     page,
   }) => {
-    const mobile = uniqueMobile();
+    const email = uniqueEmail();
     // The backend must know this identifier for REGISTER verify to auto-create the user.
-    await requestOtp(mobile, "REGISTER");
+    await requestOtp(email, "REGISTER");
 
     await page.goto("/register");
     // Lens 2 (VERIFICATION_SWEEP.md): no CA/business role selection may exist.
     await expect(page.getByTestId("register-client")).toHaveCount(0);
     await expect(page.getByTestId("register-ca")).toHaveCount(0);
-    await page.getByTestId("reg-identifier").fill(mobile);
+    await page.getByTestId("reg-identifier").fill(email);
     await page.getByTestId("reg-request-otp").click();
     const devOtp = await waitForDevOtp(page);
     await page.getByTestId("reg-otp").fill(devOtp);
@@ -75,19 +72,19 @@ test.describe("unified onboarding", () => {
   test("login for existing user routes to the unified shell", async ({
     page,
   }) => {
-    const mobile = uniqueMobile();
-    await requestOtp(mobile, "REGISTER");
-    const { dev_otp: regOtp } = await requestOtp(mobile, "REGISTER");
+    const email = uniqueEmail();
+    await requestOtp(email, "REGISTER");
+    const { dev_otp: regOtp } = await requestOtp(email, "REGISTER");
     expect(regOtp).toBeTruthy();
     const res = await fetch(`${BACKEND}/api/v1/auth/otp/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: mobile, otp: regOtp }),
+      body: JSON.stringify({ identifier: email, otp: regOtp }),
     });
     expect(res.status).toBe(200);
 
     await page.goto("/login");
-    await page.getByTestId("login-identifier").fill(mobile);
+    await page.getByTestId("login-identifier").fill(email);
     await page.getByTestId("login-request-otp").click();
     const pageOtp = await waitForLoginDevOtp(page);
     await page.getByTestId("login-otp").fill(pageOtp);
@@ -103,18 +100,18 @@ test.describe("unified onboarding", () => {
   test("shell lists GST accounts from /auth/me gst_accounts", async ({
     page,
   }) => {
-    const mobile = uniqueMobile();
-    await requestOtp(mobile, "REGISTER");
-    const { dev_otp: regOtp } = await requestOtp(mobile, "REGISTER");
+    const email = uniqueEmail();
+    await requestOtp(email, "REGISTER");
+    const { dev_otp: regOtp } = await requestOtp(email, "REGISTER");
     const res = await fetch(`${BACKEND}/api/v1/auth/otp/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: mobile, otp: regOtp }),
+      body: JSON.stringify({ identifier: email, otp: regOtp }),
     });
     expect(res.status).toBe(200);
 
     await page.goto("/login");
-    await page.getByTestId("login-identifier").fill(mobile);
+    await page.getByTestId("login-identifier").fill(email);
     await page.getByTestId("login-request-otp").click();
     const pageOtp = await waitForLoginDevOtp(page);
     await page.getByTestId("login-otp").fill(pageOtp);
@@ -153,11 +150,11 @@ test.describe("route guard", () => {
   test("authenticated user hitting /login is sent to the shell", async ({
     page,
   }) => {
-    const mobile = uniqueMobile();
-    await requestOtp(mobile, "REGISTER");
+    const email = uniqueEmail();
+    await requestOtp(email, "REGISTER");
 
     await page.goto("/register");
-    await page.getByTestId("reg-identifier").fill(mobile);
+    await page.getByTestId("reg-identifier").fill(email);
     await page.getByTestId("reg-request-otp").click();
     const devOtp = await waitForDevOtp(page);
     await page.getByTestId("reg-otp").fill(devOtp);

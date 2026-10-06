@@ -7,7 +7,6 @@ minted from the same family stop working too.
 
 from __future__ import annotations
 
-import random
 import uuid
 from typing import Any
 
@@ -18,21 +17,14 @@ from app.core.auth.errors import RefreshReuseDetected
 from app.core.auth.redis_client import get_redis
 from httpx import AsyncClient
 
-from tests.auth_helpers import _register_and_login
+from tests.auth_helpers import _register_and_login, make_email
 
 pytestmark = pytest.mark.asyncio
-
-_rng = random.SystemRandom()
-
-
-def _mobile() -> str:
-    """Unique per-call mobile — the suite shares the live dev DB (isolation)."""
-    return "9" + "".join(_rng.choice("0123456789") for _ in range(9))
 
 
 async def _login(client: AsyncClient) -> dict[str, Any]:
     """Register+login a FRESH user per call (per-test isolation)."""
-    return await _register_and_login(client, _mobile())
+    return await _register_and_login(client, make_email())
 
 
 async def test_refresh_returns_new_access_token(client: AsyncClient) -> None:
@@ -62,7 +54,7 @@ async def test_refresh_rotates_old_token_is_retired(client: AsyncClient) -> None
 
 
 async def test_refresh_reuse_kills_family(client: AsyncClient) -> None:
-    """The rotation-kill: replay of a rotated token invalidates siblings."""
+    """The rotation-kill: replay of a rotated refresh token invalidates siblings."""
     data = await _login(client)
     old_refresh = data["refresh_token"]
     first = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})

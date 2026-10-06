@@ -72,20 +72,20 @@ export default function RegisterPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h1 className="text-xl font-semibold">Create your account</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Mobile number or email — we send a 6-digit code.
+          Email address — we send a 6-digit code.
         </p>
 
         {stage === "identifier" && (
           <form onSubmit={request} className="mt-6 space-y-4">
             <label className="block text-sm font-medium">
-              Mobile or email
+              Email
               <input
-                type="text"
+                type="email"
                 required
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
-                placeholder="98xxxxxxxx or you@firm.com"
+                placeholder="you@firm.com"
                 data-testid="reg-identifier"
               />
             </label>

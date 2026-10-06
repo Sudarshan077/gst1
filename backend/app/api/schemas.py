@@ -39,7 +39,6 @@ class UserOut(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
     id: str
-    mobile: str | None
     email: str
     full_name: str
     totp_enabled: bool

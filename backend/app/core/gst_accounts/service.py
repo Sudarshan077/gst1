@@ -252,7 +252,6 @@ async def list_collaborators(session: AsyncSession, gstin: str) -> list[dict[str
         {
             "user_id": str(user.id),
             "email": user.email,
-            "mobile": user.mobile,
             "full_name": user.full_name,
             "role": role.value,
             "granted_at": _iso(getattr(user, "created_at", None)),

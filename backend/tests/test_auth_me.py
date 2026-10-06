@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json as _json
-import random
 import uuid
 from typing import Any
 
@@ -13,32 +12,24 @@ import pytest
 from app.core.auth import tokens as token_svc
 from app.core.auth.dependencies import require_stepup
 from app.core.auth.errors import StepUpRequired, TokenInvalid
-from app.db.models.core import User
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from tests.auth_helpers import _register_and_login
+from tests.auth_helpers import _register_and_login, make_email
 
 pytestmark = pytest.mark.asyncio
 
 SessionMaker = async_sessionmaker[Any]
 
-_rng = random.SystemRandom()
-
-
-def _mobile() -> str:
-    return "9" + "".join(_rng.choice("0123456789") for _ in range(9))
-
 
 async def _register_totp(
     client: AsyncClient,
-) -> tuple[dict[str, Any], str, uuid.UUID]:
+) -> tuple[dict[str, Any], uuid.UUID]:
     """Register -> TOTP setup + verify.
 
-    Returns (token_data, mobile, user_id).
+    Returns (token_data, user_id).
     """
-    mobile = _mobile()
-    data = await _register_and_login(client, mobile)
+    data = await _register_and_login(client, make_email())
     headers = {"Authorization": f"Bearer {data['access_token']}"}
 
     setup = await client.post("/api/v1/auth/totp/setup", headers=headers)
@@ -54,14 +45,14 @@ async def _register_totp(
     assert verify.status_code == 200, verify.text
 
     user_id = token_svc.verify_access_token(data["access_token"])
-    return data, mobile, user_id
+    return data, user_id
 
 
 async def test_me_v4_unified_profile(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
     """v4: REGISTER -> TOTP -> GET /auth/me = 200, returns user + gstins list."""
-    data, mobile, user_id = await _register_totp(client)
+    data, _user_id = await _register_totp(client)
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     me = await client.get("/api/v1/auth/me", headers=headers)
     assert me.status_code == 200, me.text
@@ -76,7 +67,7 @@ async def test_require_stepup_contract(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
     """4(c): no header -> 403 STEP_UP_REQUIRED; own stepup -> ok; other -> 401."""
-    data, _mobile, user_id = await _register_totp(client)
+    data, user_id = await _register_totp(client)
 
     from starlette.requests import Request
 
@@ -111,8 +102,7 @@ async def test_totp_guard_on_protected_action(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
     """4(d): TOTP-less user profile reports totp_enabled == False."""
-    mobile = _mobile()
-    data = await _register_and_login(client, mobile)
+    data = await _register_and_login(client, make_email())
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     me = await client.get("/api/v1/auth/me", headers=headers)
     assert me.status_code == 200
@@ -132,27 +122,26 @@ async def test_totp_guard_on_protected_action(
     assert me_after.json()["data"]["user"]["totp_enabled"] is True
 
 
-async def test_stepup_falls_back_mobile_when_email_otp_requested(
+async def test_stepup_with_email_otp(
     client: AsyncClient, api_sessionmaker: SessionMaker, fake_redis: fakeredis.aioredis.FakeRedis
 ) -> None:
-    """4(e): user with email AND mobile, OTP requested for MOBILE -> stepup 200."""
-    mobile = _mobile()
-    data = await _register_and_login(client, mobile)
+    """4(e): stepup with email OTP succeeds."""
+    data, _user_id = await _register_totp(client)
     access = data["access_token"]
     headers = {"Authorization": f"Bearer {access}"}
 
     user_id = token_svc.verify_access_token(access)
     async with api_sessionmaker() as session:
+        from app.db.models.core import User
+
         user = await session.get(User, user_id)
         assert user is not None
-        email = f"test+{uuid.uuid4().hex}@example.com"
-        user.email = email
-        await session.commit()
+        email = user.email
 
-    # Request OTP against the mobile identifier (the fallback target)
+    # Request OTP against the email identifier
     req = await client.post(
         "/api/v1/auth/otp/request",
-        json={"identifier": mobile, "purpose": "LOGIN"},
+        json={"identifier": email, "purpose": "LOGIN"},
     )
     assert req.status_code == 200, req.text
     otp = req.json()["data"]["dev_otp"]
@@ -166,105 +155,66 @@ async def test_stepup_falls_back_mobile_when_email_otp_requested(
     assert "stepup_token" in resp.json()["data"]
 
 
-async def test_stepup_mobile_with_both_live(
+async def test_stepup_wrong_otp_increments_attempts(
     client: AsyncClient, api_sessionmaker: SessionMaker, fake_redis: fakeredis.aioredis.FakeRedis
 ) -> None:
-    """4(f): both email and mobile hold live OTPs; stepup with mobile OTP succeeds
-    and the email OTP remains live (second stepup with email OTP succeeds)."""
-    mobile = _mobile()
-    data = await _register_and_login(client, mobile)
+    """4(f): wrong OTP with email live -> 401 OTP_INVALID and attempts increment."""
+    data, _user_id = await _register_totp(client)
     access = data["access_token"]
     headers = {"Authorization": f"Bearer {access}"}
 
     user_id = token_svc.verify_access_token(access)
     async with api_sessionmaker() as session:
+        from app.db.models.core import User
+
         user = await session.get(User, user_id)
         assert user is not None
-        email = f"test+{uuid.uuid4().hex}@example.com"
-        user.email = email
-        await session.commit()
+        email = user.email
 
-    # Request OTPs for both identifiers and read both dev_otp values.
-    req_mobile = await client.post(
-        "/api/v1/auth/otp/request",
-        json={"identifier": mobile, "purpose": "LOGIN"},
-    )
-    assert req_mobile.status_code == 200, req_mobile.text
-    mobile_otp = req_mobile.json()["data"]["dev_otp"]
-
-    req_email = await client.post(
+    req = await client.post(
         "/api/v1/auth/otp/request",
         json={"identifier": email, "purpose": "LOGIN"},
     )
-    assert req_email.status_code == 200, req_email.text
-    email_otp = req_email.json()["data"]["dev_otp"]
+    assert req.status_code == 200, req.text
 
-    # Step-up with mobile OTP.
+    # First wrong attempt increments attempts to 1
     resp1 = await client.post(
         "/api/v1/auth/stepup",
         headers=headers,
-        json={"otp": mobile_otp},
+        json={"otp": "000000"},
     )
-    assert resp1.status_code == 200, resp1.text
-    assert "stepup_token" in resp1.json()["data"]
+    assert resp1.status_code == 401
+    assert resp1.json()["error"]["code"] == "OTP_INVALID"
 
-    # Email OTP is still live.
-    assert await fake_redis.exists(f"otp:{email}") == 1
-
-    # Step-up with email OTP still succeeds.
-    resp2 = await client.post(
-        "/api/v1/auth/stepup",
-        headers=headers,
-        json={"otp": email_otp},
-    )
-    assert resp2.status_code == 200, resp2.text
-    assert "stepup_token" in resp2.json()["data"]
+    raw = await fake_redis.get(f"otp:{email}")
+    assert raw is not None, f"otp:{email} should still exist"
+    rec = _json.loads(raw)
+    assert rec["attempts"] == 1, f"otp:{email} attempts = {rec['attempts']}"
 
 
-async def test_stepup_wrong_otp_does_not_burn_attempts(
-    client: AsyncClient, api_sessionmaker: SessionMaker, fake_redis: fakeredis.aioredis.FakeRedis
+async def test_otp_too_many_attempts_kills_key_unit(
+    fake_redis: fakeredis.aioredis.FakeRedis,
 ) -> None:
-    """4(g): wrong OTP when both are live -> 401 OTP_INVALID and neither
-    identifier's attempts counter advanced beyond the single recorded attempt."""
-    mobile = _mobile()
-    data = await _register_and_login(client, mobile)
-    access = data["access_token"]
-    headers = {"Authorization": f"Bearer {access}"}
+    """Direct-service proof: after max wrong attempts the OTP key is deleted."""
+    from app.core.auth import otp as otp_svc
+    from app.core.auth.errors import OtpInvalid, OtpTooManyAttempts
 
-    user_id = token_svc.verify_access_token(access)
-    async with api_sessionmaker() as session:
-        user = await session.get(User, user_id)
-        assert user is not None
-        email = f"test+{uuid.uuid4().hex}@example.com"
-        user.email = email
-        await session.commit()
+    email = make_email()
+    await otp_svc.request_otp(fake_redis, email, "LOGIN")
+    rec = await otp_svc.peek_otp(fake_redis, email)
+    assert rec is not None
+    code = str(rec["code"])
 
-    # Request OTPs for both identifiers and read both dev_otp values.
-    req_mobile = await client.post(
-        "/api/v1/auth/otp/request",
-        json={"identifier": mobile, "purpose": "LOGIN"},
-    )
-    assert req_mobile.status_code == 200, req_mobile.text
-    mobile_otp = req_mobile.json()["data"]["dev_otp"]
+    # Build a pool of wrong codes; the exact value of code does not matter
+    # because the service increments attempts before comparing.
+    wrong_codes = [f"{i:06d}" for i in range(10) if f"{i:06d}" != code]
+    max_attempts = 5
+    for idx in range(max_attempts - 1):
+        try:
+            await otp_svc.verify_otp(fake_redis, email, wrong_codes[idx])
+        except OtpInvalid:
+            pass
 
-    req_email = await client.post(
-        "/api/v1/auth/otp/request",
-        json={"identifier": email, "purpose": "LOGIN"},
-    )
-    assert req_email.status_code == 200, req_email.text
-    email_otp = req_email.json()["data"]["dev_otp"]
-
-    wrong = "000000" if mobile_otp != "000000" and email_otp != "000000" else "111111"
-    resp = await client.post(
-        "/api/v1/auth/stepup",
-        headers=headers,
-        json={"otp": wrong},
-    )
-    assert resp.status_code == 401
-    assert resp.json()["error"]["code"] == "OTP_INVALID"
-
-    for ident in (email, mobile):
-        raw = await fake_redis.get(f"otp:{ident}")
-        assert raw is not None, f"otp:{ident} should still exist"
-        rec = _json.loads(raw)
-        assert rec["attempts"] == 0, f"otp:{ident} attempts advanced to {rec['attempts']}"
+    with pytest.raises(OtpTooManyAttempts):
+        await otp_svc.verify_otp(fake_redis, email, wrong_codes[max_attempts - 1])
+    assert not await fake_redis.exists(f"otp:{email}")

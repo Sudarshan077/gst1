@@ -77,9 +77,9 @@ async def require_stepup(
     user = await session.get(User, user_id)
     if user is None:
         raise InvalidCredentials("unknown user")
-    identifier = user.email or user.mobile
+    identifier = user.email
     if not identifier:
-        raise InvalidCredentials("user has no login identifier")
+        raise InvalidCredentials("user has no email")
     redis: Redis = get_redis()
     await verify_otp(redis, identifier, otp_header)
     return user_id

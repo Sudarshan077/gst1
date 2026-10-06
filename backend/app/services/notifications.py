@@ -37,7 +37,7 @@ async def _route_to_channels(
     n_type: str,
     payload: dict[str, Any],
 ) -> None:
-    """Route notification to email/WhatsApp based on user preferences."""
+    """Route notification to email based on user preferences."""
     user = await session.get(User, user_id)
     if not user:
         return
@@ -48,17 +48,8 @@ async def _route_to_channels(
     if user.email and prefs.get("email", True):
         await _send_email(user.email, n_type, payload)
 
-    # WhatsApp (default disabled)
-    if user.mobile and prefs.get("whatsapp", False):
-        await _send_whatsapp(user.mobile, n_type, payload)
-
 
 async def _send_email(email: str, n_type: str, payload: dict[str, Any]) -> None:
     """Placeholder for email service."""
     # Using real email backend is out of scope for this task's core logic
     print(f"Sending email to {email}: {n_type} - {payload}")
-
-
-async def _send_whatsapp(mobile: str, n_type: str, payload: dict[str, Any]) -> None:
-    """Placeholder for WhatsApp service."""
-    print(f"Sending WhatsApp to {mobile}: {n_type} - {payload}")

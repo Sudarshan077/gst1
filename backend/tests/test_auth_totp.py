@@ -7,7 +7,6 @@ step-up token contract.
 from __future__ import annotations
 
 import datetime as dt
-import random
 import uuid
 from typing import Any
 
@@ -20,34 +19,24 @@ from app.db.models.core import User
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from tests.auth_helpers import _register_and_login
+from tests.auth_helpers import _register_and_login, make_email
 
 pytestmark = pytest.mark.asyncio
 
 SessionMaker = async_sessionmaker[Any]
 
-_rng = random.SystemRandom()
 
-
-def _mobile() -> str:
-    """Unique per-call mobile — the suite shares the live dev DB (isolation)."""
-    return "9" + "".join(_rng.choice("0123456789") for _ in range(9))
-
-
-async def _login(client: AsyncClient) -> tuple[dict[str, Any], str]:
-    """Register+login a FRESH user per call; returns (tokens, mobile)."""
-    mobile = _mobile()
-    return await _register_and_login(client, mobile), mobile
-
-
-async def _user_id_from_access(sessionmaker: SessionMaker, access_token: str) -> uuid.UUID:
-    return token_svc.verify_access_token(access_token)
+async def _login(client: AsyncClient) -> tuple[dict[str, Any], uuid.UUID]:
+    """Register+login a FRESH user per call; returns (tokens, user_id)."""
+    data = await _register_and_login(client, make_email())
+    user_id = token_svc.verify_access_token(data["access_token"])
+    return data, user_id
 
 
 async def test_totp_setup_returns_secret_and_qr_uri(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
-    data, _mobile_used = await _login(client)
+    data, user_id = await _login(client)
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     resp = await client.post("/api/v1/auth/totp/setup", headers=headers)
     assert resp.status_code == 200, resp.text
@@ -55,7 +44,6 @@ async def test_totp_setup_returns_secret_and_qr_uri(
     assert body["secret"]
     assert body["qr_uri"].startswith("otpauth://totp/")
     # secret persisted on the user row
-    user_id = await _user_id_from_access(api_sessionmaker, data["access_token"])
     async with api_sessionmaker() as session:
         user = await session.get(User, user_id)
         assert user is not None and user.totp_secret == body["secret"]
@@ -65,7 +53,7 @@ async def test_totp_setup_returns_secret_and_qr_uri(
 async def test_totp_verify_wrong_code_rejected_then_correct_enables(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
-    data, _mobile_used = await _login(client)
+    data, user_id = await _login(client)
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     setup = await client.post("/api/v1/auth/totp/setup", headers=headers)
     secret = setup.json()["data"]["secret"]
@@ -79,14 +67,13 @@ async def test_totp_verify_wrong_code_rejected_then_correct_enables(
     assert good.status_code == 200
     assert good.json()["data"]["enabled"] is True
 
-    user_id = await _user_id_from_access(api_sessionmaker, data["access_token"])
     async with api_sessionmaker() as session:
         user = await session.get(User, user_id)
         assert user is not None and user.totp_enabled_at is not None
 
 
 async def test_totp_setup_twice_conflicts_after_enable(client: AsyncClient) -> None:
-    data, _mobile_used = await _login(client)
+    data, _user_id = await _login(client)
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     setup = await client.post("/api/v1/auth/totp/setup", headers=headers)
     secret = setup.json()["data"]["secret"]
@@ -125,7 +112,7 @@ async def test_totp_requires_authentication(client: AsyncClient) -> None:
 
 
 async def test_me_reports_totp_enabled_flag(client: AsyncClient) -> None:
-    data, _mobile_used = await _login(client)
+    data, _user_id = await _login(client)
     headers = {"Authorization": f"Bearer {data['access_token']}"}
     setup = await client.post("/api/v1/auth/totp/setup", headers=headers)
     secret = setup.json()["data"]["secret"]
@@ -142,13 +129,12 @@ async def test_stepup_issues_verifiable_token(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
     """POST /auth/stepup with a fresh OTP -> stepup_token verifiable as JWT."""
-    data, _mobile_used = await _login(client)
+    data, user_id = await _login(client)
     headers = {"Authorization": f"Bearer {data['access_token']}"}
-    user_id = await _user_id_from_access(api_sessionmaker, data["access_token"])
     async with api_sessionmaker() as session:
         user = await session.get(User, user_id)
         assert user is not None
-        identifier = user.mobile
+        identifier = user.email
 
     req = await client.post(
         "/api/v1/auth/otp/request", json={"identifier": identifier, "purpose": "LOGIN"}
@@ -163,15 +149,14 @@ async def test_stepup_issues_verifiable_token(
 async def test_stepup_rejects_wrong_otp(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
-    data, _mobile_used = await _login(client)
+    data, user_id = await _login(client)
     headers = {"Authorization": f"Bearer {data['access_token']}"}
-    user_id = await _user_id_from_access(api_sessionmaker, data["access_token"])
     async with api_sessionmaker() as session:
         user = await session.get(User, user_id)
         assert user is not None
         await client.post(
             "/api/v1/auth/otp/request",
-            json={"identifier": user.mobile, "purpose": "LOGIN"},
+            json={"identifier": user.email, "purpose": "LOGIN"},
         )
     resp = await client.post("/api/v1/auth/stepup", headers=headers, json={"otp": "999999"})
     assert resp.status_code == 401

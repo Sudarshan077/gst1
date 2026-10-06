@@ -47,11 +47,11 @@ class FilingScheme(enum.StrEnum):
 
 
 class User(Base):
-    """Single user identity — email is the login credential; mobile is optional contact only.
+    """Single user identity — email is the ONLY login credential.
 
-    There is no per-user role and no CA/owner split: the only roles live in
-    user_gst_access (ADMIN/FILER/VIEWER on a GSTIN), and the GSTIN creator is
-    automatically its ADMIN.
+    There is no per-user role, no CA/owner split, and no mobile field: the
+    only roles live in user_gst_access (ADMIN/FILER/VIEWER on a GSTIN), and the
+    GSTIN creator is automatically its ADMIN.
     """
 
     __tablename__ = "users"
@@ -61,12 +61,8 @@ class User(Base):
         Uuid(), primary_key=True, default=uuid.uuid4
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    mobile: Mapped[str | None] = mapped_column(String(15), unique=True)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    mobile_verified_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
     totp_secret: Mapped[str | None] = mapped_column(String(255))
     totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notification_preferences: Mapped[dict[str, Any] | None] = mapped_column(

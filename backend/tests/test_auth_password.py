@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import random
-import string
 import uuid
 
 import pytest
@@ -17,13 +15,11 @@ pytestmark = pytest.mark.asyncio
 async def test_password_login_success(client: AsyncClient, api_sessionmaker: SessionMaker) -> None:
     # 1. Setup user with password
     email = f"test_{uuid.uuid4().hex[:6]}@example.com"
-    mobile = "9" + "".join(random.choices(string.digits, k=9))  # noqa: S311
     password = "secure_password"
     async with api_sessionmaker() as session:
         user = User(
             email=email,
             full_name="Test User",
-            mobile=mobile,
             password_hash=get_password_hash(password),
         )
         session.add(user)
@@ -43,13 +39,11 @@ async def test_password_login_success(client: AsyncClient, api_sessionmaker: Ses
 async def test_password_login_failure(client: AsyncClient, api_sessionmaker: SessionMaker) -> None:
     # 1. Setup user with password
     email = f"test2_{uuid.uuid4().hex[:6]}@example.com"
-    mobile = "8" + "".join(random.choices(string.digits, k=9))  # noqa: S311
     password = "secure_password"
     async with api_sessionmaker() as session:
         user = User(
             email=email,
             full_name="Test User 2",
-            mobile=mobile,
             password_hash=get_password_hash(password),
         )
         session.add(user)

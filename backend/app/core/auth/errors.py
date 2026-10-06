@@ -78,7 +78,7 @@ class StepUpRequired(AuthError):
 
 
 class IdentifierInvalid(AuthError):
-    """Identifier is neither a valid mobile nor email."""
+    """Identifier is not a valid email address."""
 
     status_code = 422
     code = "IDENTIFIER_INVALID"

@@ -13,8 +13,6 @@ from app.core.auth import tokens as token_svc
 from app.core.auth import totp as totp_svc
 from app.core.auth.errors import (
     InvalidCredentials,
-    OtpExpired,
-    OtpInvalid,
     TokenInvalid,
     TotpInvalid,
 )
@@ -26,7 +24,6 @@ from app.db.models.core import GstAccount, User, UserGstAccess
 def _user_out(user: User) -> dict[str, object]:
     return {
         "id": str(user.id),
-        "mobile": user.mobile,
         "email": user.email,
         "full_name": user.full_name,
         "totp_enabled": user.totp_enabled_at is not None,
@@ -45,45 +42,31 @@ async def verify_otp(
 ) -> tuple[dict[str, object], dict[str, str]]:
     """POST /auth/otp/verify — LOGIN or REGISTER.
 
-    New users are auto-created on REGISTER; the login identifier becomes the
-    primary email. Email is the single credential for the unified user model.
+    New users are auto-created on REGISTER; the login identifier is the email.
     """
     redis = get_redis()
     purpose = await otp_svc.verify_otp(redis, identifier, code)
     user = (
         await session.execute(
-            select(User).where((User.mobile == identifier) | (User.email == identifier))
+            select(User).where(User.email == identifier.strip().lower())
         )
     ).scalar_one_or_none()
     if user is None:
         if purpose == "REGISTER":
-            if "@" in identifier:
-                email = identifier.strip().lower()
-                mobile = None
-            else:
-                email = _placeholder_email()
-                mobile = identifier.strip()
-            full_name = f"User {identifier[-4:]}"
+            email = identifier.strip().lower()
+            full_name = f"User {email.split('@')[0][-4:]}"
             user = User(
-                mobile=mobile,
                 email=email,
                 full_name=full_name,
-                mobile_verified_at=dt.datetime.now(tz=dt.UTC),
             )
             session.add(user)
             await session.commit()
         else:
-            raise InvalidCredentials("no account for this identifier — register first")
+            raise InvalidCredentials("no account for this email — register first")
 
     access = token_svc.create_access_token(user.id)
     refresh = await token_svc.issue_refresh_family(redis, user.id)
     return _user_out(user), {"access_token": access, "refresh_token": refresh}
-
-
-def _placeholder_email() -> str:
-    """Mobile-first registrations still need a unique email (email is the primary login)."""
-    return f"{uuid.uuid4().hex[:12]}@placeholder.local"
-
 
 
 async def login_with_password(
@@ -92,7 +75,7 @@ async def login_with_password(
     """POST /auth/login/password"""
     user = (
         await session.execute(
-            select(User).where((User.mobile == identifier) | (User.email == identifier))
+            select(User).where(User.email == identifier.strip().lower())
         )
     ).scalar_one_or_none()
     if (
@@ -100,22 +83,13 @@ async def login_with_password(
         or user.password_hash is None
         or not verify_password(password, user.password_hash)
     ):
-        raise InvalidCredentials("invalid identifier or password")
+        raise InvalidCredentials("invalid email or password")
 
     redis = get_redis()
     access = token_svc.create_access_token(user.id)
     refresh = await token_svc.issue_refresh_family(redis, user.id)
     return _user_out(user), {"access_token": access, "refresh_token": refresh}
 
-
-def _placeholder_mobile() -> str:
-    """Email-first users no longer require a synthetic mobile (mobile is optional).
-
-    A reserved 0-prefix never collides with real Indian mobiles (10 digits,
-    leading 6-9). Kept only for backwards compatibility with callers that still
-    expect a mobile fallback.
-    """
-    return "0" + uuid.uuid4().hex[:13]
 
 
 async def refresh(session: AsyncSession, refresh_token: str) -> tuple[dict[str, str], str]:
@@ -133,40 +107,18 @@ async def refresh(session: AsyncSession, refresh_token: str) -> tuple[dict[str, 
 async def stepup(session: AsyncSession, user_id: uuid.UUID, otp: str) -> dict[str, str]:
     """POST /auth/stepup — fresh OTP proves the user for sensitive routes.
 
-    We peek all live OTP records for the user's identifiers, match the supplied
-    code without consuming attempts, and only verify (delete) the matching one.
-    OtpExpired / OtpTooManyAttempts semantics are preserved per identifier.
+    The OTP must have been requested for the user's email; verify consumes the
+    code and returns a step-up token.
     """
     redis = get_redis()
     user = await session.get(User, user_id)
     if user is None:
         raise InvalidCredentials("unknown user")
-    idents = [i for i in (user.email, user.mobile) if i]
-    if not idents:
-        raise InvalidCredentials("no identifier available for step-up")
-    live = [(i, r) for i in idents if (r := await otp_svc.peek_otp(redis, i)) is not None]
-    if not live:
-        raise OtpExpired("no active OTP for this identifier")
-    match = next((i for i, r in live if r["code"] == otp), None)  # identical codes -> email first
-    if match is None:
-        raise OtpInvalid("incorrect OTP")  # no counter touched anywhere
-    await otp_svc.verify_otp(redis, match, otp)  # attempts++, delete, raises on exhausted
-    return {"stepup_token": token_svc.create_stepup_token(user_id)}
-
-
-def _login_identifier(user: User) -> str:
-    """One login identifier per user; v4 allows email OR mobile, so guard both."""
-    identifier = user.email or user.mobile
+    identifier = user.email
     if not identifier:
-        raise InvalidCredentials("user has no login identifier")
-    return str(identifier)
-
-
-async def _identifier_of(session: AsyncSession, user_id: uuid.UUID) -> str:
-    user = await session.get(User, user_id)
-    if user is None:
-        raise InvalidCredentials("unknown user")
-    return _login_identifier(user)
+        raise InvalidCredentials("user has no email")
+    await otp_svc.verify_otp(redis, identifier, otp)
+    return {"stepup_token": token_svc.create_stepup_token(user_id)}
 
 
 async def totp_setup(session: AsyncSession, user_id: uuid.UUID) -> dict[str, str]:
@@ -180,7 +132,7 @@ async def totp_setup(session: AsyncSession, user_id: uuid.UUID) -> dict[str, str
     await session.commit()
     return {
         "secret": secret,
-        "qr_uri": totp_svc.provisioning_uri(secret, _login_identifier(user)),
+        "qr_uri": totp_svc.provisioning_uri(secret, user.email),
     }
 
 

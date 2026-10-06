@@ -33,8 +33,7 @@ export class ApiError extends Error {
 
 interface UserDto {
   id: string;
-  mobile: string;
-  email: string | null;
+  email: string;
   full_name: string;
   totp_enabled: boolean;
 }
