@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.access import GstinAccess, require_gstin_access, audit
+from app.core.access import GstinAccess, audit, require_gstin_access
 from app.core.auth.dependencies import require_user
 from app.db.models.gst import ExportType, FilingPeriod, FilingStatus, Gstr1Export
 from app.db.session import get_session
-from app.services.returns.gstr1a import create_gstr1a_amendments
 from app.services.returns.gsp_adapter import file_gstr1_gsp, file_gstr3b_gsp
+from app.services.returns.gstr1a import create_gstr1a_amendments
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 UserDep = Annotated[uuid.UUID, Depends(require_user)]
@@ -25,7 +27,14 @@ async def prepare_gstr1(
     session: SessionDep,
     user_id: UserDep,
 ) -> dict[str, Any]:
-    await audit(session, action="GSTR1_PREPARE", entity="return", entity_id=f"{gstin}-{fp}", actor_user_id=user_id, gstin=gstin)
+    await audit(
+        session,
+        action="GSTR1_PREPARE",
+        entity="return",
+        entity_id=f"{gstin}-{fp}",
+        actor_user_id=user_id,
+        gstin=gstin,
+    )
     return {"success": True, "data": {"summary": "OK"}}
 
 @router.post("/gstr1/generate")
@@ -36,7 +45,6 @@ async def generate_gstr1(
     session: SessionDep,
     user_id: UserDep,
 ) -> dict[str, Any]:
-    # Create Gstr1Export record
     export = Gstr1Export(
         gstin=gstin,
         fp=fp,
@@ -48,9 +56,17 @@ async def generate_gstr1(
         export_type=ExportType.ORIGINAL,
     )
     session.add(export)
-    await audit(session, action="GSTR1_GENERATE", entity="return", entity_id=str(export.id), actor_user_id=user_id, gstin=gstin)
+    await audit(
+        session,
+        action="GSTR1_GENERATE",
+        entity="return",
+        entity_id=str(export.id),
+        actor_user_id=user_id,
+        gstin=gstin,
+    )
     await session.commit()
     return {"success": True, "data": {"export_id": str(export.id)}}
+
 
 @router.post("/filed")
 async def file_return(
@@ -67,17 +83,46 @@ async def file_return(
             fp=fp,
             scheme_snapshot="REGULAR_MONTHLY",
             status=FilingStatus.FILED,
-            filed_at=datetime.utcnow(),
+            filed_at=datetime.now(UTC),
             filed_by=user_id,
         )
         session.add(period)
     else:
         period.status = FilingStatus.FILED
-        period.filed_at = datetime.utcnow()
+        period.filed_at = datetime.now(UTC)
         period.filed_by = user_id
-    await audit(session, action="RETURN_FILED", entity="return", entity_id=f"{gstin}-{fp}", actor_user_id=user_id, gstin=gstin)
+    await audit(
+        session,
+        action="RETURN_FILED",
+        entity="return",
+        entity_id=f"{gstin}-{fp}",
+        actor_user_id=user_id,
+        gstin=gstin,
+    )
     await session.commit()
     return {"success": True, "data": {"status": "FILED"}}
+
+
+@router.post("/gstr1a")
+async def gstr1a_amend(
+    gstin: str,
+    fp: str,
+    body: dict[str, Any],
+    access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
+    session: SessionDep,
+    user_id: UserDep,
+) -> dict[str, Any]:
+    created = await create_gstr1a_amendments(session, gstin, fp, body)
+    await audit(
+        session,
+        action="GSTR1A_AMEND",
+        entity="gstr1a",
+        entity_id=f"{gstin}-{fp}",
+        actor_user_id=user_id,
+        gstin=gstin,
+    )
+    return {"success": True, "data": {"amendments": created}}
+
 
 @router.post("/gstr4/prepare")
 async def prepare_gstr4(
@@ -103,13 +148,13 @@ async def file_gstr4(
             fp=fp,
             scheme_snapshot="COMPOSITION",
             status=FilingStatus.FILED,
-            filed_at=datetime.utcnow(),
+            filed_at=datetime.now(UTC),
             filed_by=user_id,
         )
         session.add(period)
     else:
         period.status = FilingStatus.FILED
-        period.filed_at = datetime.utcnow()
+        period.filed_at = datetime.now(UTC)
         period.filed_by = user_id
     await session.commit()
     return {"success": True, "data": {"status": "FILED"}}

@@ -25,6 +25,7 @@ EXPECTED_TABLES: dict[str, set[str]] = {
         "gst_accounts",
         "user_gst_access",
         "audit_logs",
+        "dpdp_requests",
     },
     "gst": {
         "document_series",
@@ -49,8 +50,8 @@ EXPECTED_TABLES: dict[str, set[str]] = {
 }
 
 
-def test_model_metadata_registers_all_20_v4_tables() -> None:
-    """The ORM registers exactly the doc's 20 v4 tables across 3 schemas."""
+def test_model_metadata_registers_all_21_v4_tables() -> None:
+    """The ORM registers the v4 tables + DPDP request registry across 3 schemas."""
 
     by_schema: dict[str, set[str]] = {}
     for table in Base.metadata.sorted_tables:

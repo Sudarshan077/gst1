@@ -36,6 +36,7 @@ EXPECTED_TABLES: dict[str, set[str]] = {
         "gst_accounts",
         "user_gst_access",
         "audit_logs",
+        "dpdp_requests",
     },
     "extraction": {
         "documents",
@@ -167,7 +168,7 @@ async def test_upgrade_downgrade_upgrade_cycle_clean(scratch_db: str) -> None:
 
 
 async def test_all_v4_tables_present_in_correct_schemas(scratch_db: str) -> None:
-    """All 20 §3 v4 tables exist in core/gst/extraction after upgrade head."""
+    """All 21 tables exist in core/gst/extraction after upgrade head."""
     _alembic(scratch_db, "upgrade", "head")
     tables, _ = await _tables_and_enums(scratch_db)
 
@@ -177,7 +178,7 @@ async def test_all_v4_tables_present_in_correct_schemas(scratch_db: str) -> None
         extra = actual - expected
         assert not missing, f"{schema}: missing {sorted(missing)}"
         assert not extra, f"{schema}: unexpected {sorted(extra)}"
-    assert len(tables) == 20
+    assert len(tables) == 21
 
 
 async def test_gstin_primary_key_and_access_link(scratch_db: str) -> None:

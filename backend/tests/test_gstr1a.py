@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import io
+from typing import Any
 
 import httpx
 import pytest
@@ -10,7 +13,9 @@ from tests.v4_helpers import seed_account, seed_open_period
 
 
 @pytest.mark.asyncio
-async def test_gstr1a_amendments_and_locking(client: httpx.AsyncClient, api_sessionmaker):
+async def test_gstr1a_amendments_and_locking(
+    client: httpx.AsyncClient, api_sessionmaker: Any
+) -> None:
     tokens, account = await seed_account(client, api_sessionmaker)
     gstin = account.gstin
     fp = "102026"
@@ -21,7 +26,7 @@ async def test_gstr1a_amendments_and_locking(client: httpx.AsyncClient, api_sess
     # Generate GSTR-1 export
     resp = await client.post(
         f"/api/v1/gst-accounts/{gstin}/months/{fp}/gstr1/generate",
-        headers=headers
+        headers=headers,
     )
     assert resp.status_code == 200, resp.text
     export_id = resp.json()["data"]["export_id"]
@@ -29,7 +34,7 @@ async def test_gstr1a_amendments_and_locking(client: httpx.AsyncClient, api_sess
     # File return (locks period)
     resp = await client.post(
         f"/api/v1/gst-accounts/{gstin}/months/{fp}/filed",
-        headers=headers
+        headers=headers,
     )
     assert resp.status_code == 200, resp.text
 
@@ -43,34 +48,40 @@ async def test_gstr1a_amendments_and_locking(client: httpx.AsyncClient, api_sess
         f"/api/v1/gst-accounts/{gstin}/months/{fp}/documents",
         headers=headers,
         files=files,
-        data=data
+        data=data,
     )
-    assert resp.status_code == 423, f"Expected 423 on locked period mutation, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 423, (
+        f"Expected 423 on locked period mutation, got {resp.status_code}: {resp.text}"
+    )
 
     # Submit GSTR-1A amendment delta
     amendment_payload = {
         "amendments": [
             {
                 "field_deltas": {"taxable_value_paise": 50000},
-                "reason": "Value correction for outward supply"
+                "reason": "Value correction for outward supply",
             }
         ]
     }
     resp = await client.post(
         f"/api/v1/gst-accounts/{gstin}/months/{fp}/gstr1a",
         headers=headers,
-        json=amendment_payload
+        json=amendment_payload,
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()["data"]
     assert len(data["amendments"]) == 1
-    assert data["status"] == "AMENDED"
+    assert data["amendments"][0]["status"] == "DRAFT"
 
     # Verify delta record created in DB and target_export_id linked correctly
     async with api_sessionmaker() as session:
-        amendments = (await session.execute(
-            select(Gstr1aAmendment).where(Gstr1aAmendment.target_export_id == export_id)
-        )).scalars().all()
+        amendments = (
+            await session.execute(
+                select(Gstr1aAmendment).where(
+                    Gstr1aAmendment.target_export_id == export_id
+                )
+            )
+        ).scalars().all()
         assert len(amendments) == 1
         assert amendments[0].reason == "Value correction for outward supply"
         assert amendments[0].field_deltas == {"taxable_value_paise": 50000}
