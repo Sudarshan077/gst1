@@ -84,6 +84,53 @@ export interface GstAccountDto {
   created_at: string | null;
 }
 
+export interface GspFileResult {
+  ref_id: string;
+  ack_no: string;
+  status: string;
+  timestamp: string;
+}
+
+export interface EInvoiceDto {
+  irn: string;
+  ack_no: string | null;
+  ack_date: string | null;
+  cancelled_at: string | null;
+}
+
+export async function fileGstr1ViaGsp(
+  gstin: string,
+  fp: string,
+): Promise<GspFileResult> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/gsp/gstr1/file`, {
+    method: "POST",
+  });
+}
+
+export async function fileGstr3bViaGsp(
+  gstin: string,
+  fp: string,
+): Promise<GspFileResult> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/gsp/gstr3b/file`, {
+    method: "POST",
+  });
+}
+
+export async function generateIrn(invoiceId: string): Promise<EInvoiceDto> {
+  return apiFetch(`/invoices/${invoiceId}/irn`, { method: "POST" });
+}
+
+export async function cancelIrn(invoiceId: string): Promise<EInvoiceDto> {
+  return apiFetch(`/einvoices/${invoiceId}/cancel`, { method: "POST" });
+}
+
+export async function listEinvoices(
+  gstin: string,
+  fp: string,
+): Promise<EInvoiceDto[]> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/einvoices`);
+}
+
 let accessToken: string | null = null;
 let refreshPromise: Promise<boolean> | null = null;
 

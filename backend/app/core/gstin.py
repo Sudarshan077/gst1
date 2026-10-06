@@ -7,12 +7,16 @@ GSTN worked example 27AAPFU0939F1ZV and additional checksum-valid vectors.
 
 from __future__ import annotations
 
+import random
 import re
+import string
 
 _CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 _WEIGHTS = (1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2)
 _GSTIN_RE = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$")
 _PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
+
+_rng = random.SystemRandom()
 
 
 def _check_digit(first14: str) -> str:
@@ -55,3 +59,37 @@ def pan_from_gstin(gstin: str) -> str:
 def gstin_state_code(gstin: str) -> str:
     """First two characters of a validated GSTIN."""
     return validate_gstin(gstin)[:2]
+
+
+def make_pan() -> str:
+    """Random structurally-valid PAN: 5 letters, 4 digits, 1 letter."""
+    return (
+        "".join(_rng.choice(string.ascii_uppercase) for _ in range(5))
+        + "".join(_rng.choice(string.digits) for _ in range(4))
+        + _rng.choice(string.ascii_uppercase)
+    )
+
+
+def make_gstin(
+    pan: str | None = None, state_code: str | None = None, entity_code: str = "1"
+) -> str:
+    """Checksum-valid 15-char GSTIN: state(2) + PAN(10) + entity(1) + Z + check.
+
+    The PAN is embedded at positions 3-12, so GSTIN[2:12] == pan always.
+    """
+    pan = pan or make_pan()
+    state = state_code or _rng.choice(("27", "29", "07", "06", "24"))
+    first14 = f"{state}{pan}{entity_code}Z"
+    return validate_gstin(first14 + _check_digit(first14))
+
+
+def gstin_checksum_valid(gstin: str) -> bool:
+    """Validate structure + mod-36 checksum digit (independent re-implementation)."""
+    g = (gstin or "").upper().strip()
+    if not _GSTIN_RE.fullmatch(g):
+        return False
+    total = 0
+    for i, ch in enumerate(g[:14]):
+        prod = _CHARSET.index(ch) * _WEIGHTS[i]
+        total += prod // 36 + prod % 36
+    return _CHARSET[(36 - total % 36) % 36] == g[14]

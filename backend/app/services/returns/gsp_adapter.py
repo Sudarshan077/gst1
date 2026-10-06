@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from app.core.access import audit
+from app.core.gstin import make_gstin
 from app.db.models.gst import FilingPeriod, FilingStatus, Gstr2bEntry, Gstr2bSource, Gstr2bStatement
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,7 +130,7 @@ async def fetch_gstr2b_gsp(
 
     sample_entry = Gstr2bEntry(
         statement_id=statement.id,
-        supplier_gstin="29ABCDE1234F1Z5",
+        supplier_gstin=make_gstin(),
         invoice_no="GSP-INV-001",
         invoice_date=date.fromisoformat("2026-09-10"),
         taxable_value_minor=100000,

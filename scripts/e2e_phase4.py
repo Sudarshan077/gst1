@@ -12,7 +12,7 @@ test_files = [
     os.path.join(backend_path, "tests", "test_irp_live_gated.py")
 ]
 result = subprocess.run(
-    ["uv", "run", "--project", backend_path, "pytest"] + test_files,
+    ["uv", "run", "--project", backend_path, "pytest", "--no-cov"] + test_files,
     cwd=backend_path,
 )
 sys.exit(result.returncode)
