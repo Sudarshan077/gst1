@@ -9,7 +9,7 @@ os.environ['PYTHONPATH'] = root_path
 
 test_file = os.path.join(backend_path, "tests", "test_e2e_phase2.py")
 result = subprocess.run(
-    ["uv", "run", "--project", backend_path, "pytest", test_file],
+    ["uv", "run", "--project", backend_path, "pytest", test_file, "--no-cov"],
     cwd=backend_path,
 )
 sys.exit(result.returncode)
