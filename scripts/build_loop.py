@@ -570,7 +570,7 @@ BUILD STATE (state.json): {json.dumps(state, indent=2)}
 {flag_note}
 
 ALL PHASES (from build/plan.json) — {len(load_json(PLAN_PATH, {})['phases'])} phases. You are on phase {phase['id']}.
-There {'IS' if next_phase else 'is NO'} a next phase{' — ' + next_phase['id'] + ' ' + next_phase['name'] if next_phase else ''}.
+There {'IS' if next_phase else 'is NO'} a next phase{' — ' + str(next_phase['id']) + ' ' + next_phase['name'] if next_phase else ''}.
 
 YOUR SUPERVISION DUTIES — answer each explicitly:
 A. EVIDENCE CHECK: did the Tester actually run commands and show real output, or did it just restate the Builder's claims? Quote the proof or say MISSING.
