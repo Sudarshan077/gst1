@@ -151,7 +151,12 @@ def validate_gstr1_payload(data: dict[str, Any]) -> tuple[bool, Optional[str]]:
         return False, str(e)
 
 
-def build_gstr1_from_invoices(gstin: str, fp: str, invoices: list[Any], notes: list[Any] = None) -> dict[str, Any]:
+def build_gstr1_from_invoices(
+    gstin: str,
+    fp: str,
+    invoices: list[Any],
+    notes: list[Any] | None = None,
+) -> dict[str, Any]:
     """Convert confirmed DB invoices and notes into a GSTR-1 payload."""
     b2b_map: dict[str, list[Gstr1InvoiceItem]] = {}
     cdnr_map: dict[str, list[Gstr1CdnrItem]] = {}

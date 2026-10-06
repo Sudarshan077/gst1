@@ -105,7 +105,7 @@ export default function CaHomePage() {
             {filteredAccounts.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                        No clients matching "{search}" — firm id: {me?.firm ?? "—"}
+                        No clients matching &ldquo;{search}&rdquo; — firm id: {me?.firm ?? "—"}
                     </p>
                 </div>
             ) : (

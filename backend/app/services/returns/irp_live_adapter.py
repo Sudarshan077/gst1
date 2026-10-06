@@ -28,7 +28,9 @@ async def generate_live_irn(
 ) -> EInvoice:
     settings = get_settings()
     if settings.irp_sandbox_mode:
-        raise ServiceError("Live IRP adapter invoked while irp_sandbox_mode is True", 400, "INVALID_OPERATION")
+        raise ServiceError(
+            "Live IRP adapter invoked while irp_sandbox_mode is True", 400, "INVALID_OPERATION"
+        )
 
     # Credential Gate
     if not settings.irp_client_id or settings.irp_client_id == "dev-client-id":
@@ -105,7 +107,9 @@ async def generate_live_irn(
             signed_qr = res_data.get("SignedQRCode")
 
         except httpx.RequestError as e:
-            raise ServiceError(f"Live IRP connection failed: {str(e)}", 503, "SERVICE_UNAVAILABLE")
+            raise ServiceError(
+                f"Live IRP connection failed: {str(e)}", 503, "SERVICE_UNAVAILABLE"
+            ) from e
 
     new_e_invoice = EInvoice(
         invoice_id=invoice_id,
@@ -130,7 +134,9 @@ async def cancel_live_irn(
 ) -> EInvoice:
     settings = get_settings()
     if settings.irp_sandbox_mode:
-        raise ServiceError("Live IRP adapter invoked while irp_sandbox_mode is True", 400, "INVALID_OPERATION")
+        raise ServiceError(
+            "Live IRP adapter invoked while irp_sandbox_mode is True", 400, "INVALID_OPERATION"
+        )
 
     result = await session.execute(
         select(EInvoice).where(EInvoice.invoice_id == invoice_id)
