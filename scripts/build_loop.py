@@ -275,13 +275,60 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
             except Exception:
                 pass
 
-        STUCK_CHECK_INTERVAL = 600   # every 10 min
-        STUCK_MIN_CPU = 0.2          # < 0.2s CPU per 10-min window = idle-stuck
+        # ── Multi-signal liveness (Tony, 7 Oct) ──────────────────────────
+        # CPU alone has a blind spot: an agent waiting on a network response
+        # from ollama-cloud shows ~0 CPU but is still alive. We now check FOUR
+        # signals: CPU, active TCP connections, disk I/O, and memory growth.
+        # An agent is only STUCK if ALL FOUR are flat — any one being active
+        # means it's working (streaming, reading, writing, or waiting on API).
+        # This lets us safely check every 120s instead of 600s.
+
+        def tree_net_connections(root_pid: int) -> list:
+            """Active TCP connections across the whole agent tree."""
+            conns = []
+            for pid in tree_pids(root_pid):
+                try:
+                    for c in psutil.Process(pid).net_connections(kind="tcp"):
+                        if c.status == psutil.CONN_ESTABLISHED:
+                            conns.append((pid, c.laddr, c.raddr, c.status))
+                except (psutil.Error, OSError):
+                    pass
+            return conns
+
+        def tree_io(root_pid: int) -> int:
+            """Total disk I/O bytes (read + write) across the agent tree."""
+            total = 0
+            for pid in tree_pids(root_pid):
+                try:
+                    io = psutil.Process(pid).io_counters()
+                    total += io.read_bytes + io.write_bytes
+                except (psutil.Error, OSError, AttributeError):
+                    pass
+            return total
+
+        def tree_mem(root_pid: int) -> int:
+            """Total RSS memory (bytes) across the agent tree."""
+            total = 0
+            for pid in tree_pids(root_pid):
+                try:
+                    total += psutil.Process(pid).memory_info().rss
+                except (psutil.Error, OSError):
+                    pass
+            return total
+
+        STUCK_CHECK_INTERVAL = 120   # every 2 min (was 600 — safe with 4 signals)
+        STUCK_MIN_CPU = 0.2          # < 0.2s CPU per window = idle
         STUCK_HARD_CAP = 7200        # absolute 2h backstop per role run
+        # An agent with active TCP connections is waiting on the API — NOT stuck.
+        # Require ALL signals flat to declare stuck (CPU + no TCP + no I/O delta + no mem delta).
+        STUCK_MIN_IO_DELTA = 1024          # < 1KB I/O delta = no disk activity
+        STUCK_MIN_MEM_DELTA = 256 * 1024   # < 256KB mem delta = no streaming/loading
 
         deadline = time.time() + STUCK_HARD_CAP
         window_start = time.time()
         cpu_start = tree_cpu(proc.pid)
+        io_start = tree_io(proc.pid)
+        mem_start = tree_mem(proc.pid)
         while proc.poll() is None:
             now_t = time.time()
             if now_t >= deadline:
@@ -295,16 +342,34 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
             if now_t - window_start >= STUCK_CHECK_INTERVAL:
                 cpu_now = tree_cpu(proc.pid)
                 window_cpu = cpu_now - cpu_start
-                if window_cpu < STUCK_MIN_CPU:
-                    log(f"  ✗ {model} STUCK {now_t - t0:.0f}s in — only {window_cpu:.1f}s CPU in last {STUCK_CHECK_INTERVAL//60} min — killing tree")
+                net_conns = tree_net_connections(proc.pid)
+                io_now = tree_io(proc.pid)
+                io_delta = io_now - io_start
+                mem_now = tree_mem(proc.pid)
+                mem_delta = mem_now - mem_start
+                # Stuck = ALL signals flat: no CPU, no active TCP, no I/O, no mem growth
+                all_flat = (
+                    window_cpu < STUCK_MIN_CPU
+                    and len(net_conns) == 0
+                    and io_delta < STUCK_MIN_IO_DELTA
+                    and mem_delta < STUCK_MIN_MEM_DELTA
+                )
+                if all_flat:
+                    log(f"  ✗ {model} STUCK {now_t - t0:.0f}s in — "
+                        f"CPU={window_cpu:.1f}s, TCP={len(net_conns)}, "
+                        f"IO_delta={io_delta}B, MEM_delta={mem_delta}B — "
+                        f"killing tree")
                     kill_tree(proc.pid)
                     try:
                         proc.communicate(timeout=60)
                     except Exception:
                         pass
                     return f"TIMEOUT (stuck) after {now_t - t0:.0f}s"
+                # At least one signal is active — agent is working or waiting on API
                 cpu_start = cpu_now
                 window_start = now_t
+                io_start = io_now
+                mem_start = mem_now
             time.sleep(5)
         out, _ = proc.communicate()
     except Exception as exc:  # spawn failure = route fault, let the chain fail over
