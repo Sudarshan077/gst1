@@ -11,6 +11,7 @@ import sys
 import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic import command
@@ -68,14 +69,46 @@ def _alembic_config(db_name: str) -> Config:
     return cfg
 
 
+async def _retry_ddl(conn: Any, ddl: str, attempts: int = 10, delay: float = 0.5) -> None:
+    """Run CREATE/DROP DATABASE retrying transient PG catalog races.
+
+    Concurrent xdist workers performing database-level DDL can hit
+    InternalError('tuple concurrently updated') on the pg_database
+    catalog; the statement itself is correct, only the timing is bad.
+    """
+    import asyncio
+
+    from sqlalchemy.exc import DBAPIError, InternalError
+
+    for attempt in range(attempts):
+        try:
+            await conn.execute(text(ddl))
+            return
+        except InternalError as exc:
+            if "tuple concurrently updated" not in str(exc) or attempt == attempts - 1:
+                raise
+            await asyncio.sleep(delay)
+        except DBAPIError as exc:
+            if "tuple concurrently updated" not in str(getattr(exc, "orig", exc)) or (
+                attempt == attempts - 1
+            ):
+                raise
+            await asyncio.sleep(delay)
+
+
 @pytest.fixture()
 async def scratch_db() -> AsyncGenerator[str, None]:
-    """Create an empty throwaway database; drop it (with leftovers) after."""
+    """Create an empty throwaway database; drop it (with leftovers) after.
+
+    CREATE/DROP DATABASE from concurrent pytest-xdist workers can hit
+    PostgreSQL catalog races ('tuple concurrently updated'); retry both
+    legs so the migrations suite is safe under -n parallel runs (task 5.5).
+    """
     db_name = f"gst_mig_test_{uuid.uuid4().hex[:12]}"
     admin = create_async_engine(ADMIN_URL, isolation_level="AUTOCOMMIT")
     try:
         async with admin.connect() as conn:
-            await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+            await _retry_ddl(conn, f'CREATE DATABASE "{db_name}"')
         await conn.close()
     finally:
         await admin.dispose()
@@ -100,7 +133,7 @@ async def scratch_db() -> AsyncGenerator[str, None]:
                     "WHERE datname = :db AND pid <> pg_backend_pid()"
                 ).bindparams(db=db_name)
             )
-            await conn.execute(text(f'DROP DATABASE "{db_name}"'))
+            await _retry_ddl(conn, f'DROP DATABASE "{db_name}"')
     finally:
         await admin.dispose()
 

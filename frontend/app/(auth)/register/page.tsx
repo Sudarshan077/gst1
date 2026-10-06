@@ -56,15 +56,14 @@ export default function RegisterPage() {
       const res = await verifyOtp(identifier, otp);
       setAccessToken(res.access_token);
       clearSession();
-      if (role === "CA") {
-        // TOTP is mandatory before any firm-join (SECURITY §1).
-        setRoleCookie("CA");
-        router.push("/totp");
-      } else {
-        setRoleCookie("CLIENT");
-        router.push("/app");
+      if (role === null) {
+        setError("select an account type first");
+        return;
       }
-      // Force middleware to re-evaluate the new role cookie on the next render.
+      // Register flow sets a role hint cookie to route the browser; login relies
+      // on /auth/me server truth (gst_accounts is the authoritative shape).
+      setRoleCookie(role);
+      router.push(role === "CA" ? "/totp" : "/app");
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "OTP verification failed");

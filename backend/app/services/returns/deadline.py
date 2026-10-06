@@ -18,6 +18,7 @@ from app.db.models.gst import (
 )
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 # Category 1 States / UTs for QRMP GSTR-3B (due 22nd of month succeeding quarter)
 CATEGORY_1_STATES = {
@@ -181,9 +182,14 @@ async def get_month_summary(
         )
     ).scalar_one()
 
-    # Invoice ledger totals for SALES in this period
+    # Invoice ledger totals for SALES in this period.
+    # selectinload lines: async sessions have no implicit lazy loading, so
+    # touching inv.lines after the query would raise MissingGreenlet in
+    # production whenever any invoice exists.
     invoices_result = await session.execute(
-        select(Invoice).where(
+        select(Invoice)
+        .options(selectinload(Invoice.lines))
+        .where(
             Invoice.gstin == gstin,
             Invoice.fp == fp,
             Invoice.direction == "SALES",

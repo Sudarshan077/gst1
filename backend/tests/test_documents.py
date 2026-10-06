@@ -441,7 +441,8 @@ async def test_multifile_non_burst_rejected_422(
     async with api_sessionmaker() as session:
         before = (
             await session.execute(
-                text("SELECT count(*) FROM extraction.documents")
+                text("SELECT count(*) FROM extraction.documents WHERE gstin = :g"),
+                {"g": gstin},
             )
         ).scalar_one()
 
@@ -458,7 +459,8 @@ async def test_multifile_non_burst_rejected_422(
     async with api_sessionmaker() as session:
         after = (
             await session.execute(
-                text("SELECT count(*) FROM extraction.documents")
+                text("SELECT count(*) FROM extraction.documents WHERE gstin = :g"),
+                {"g": gstin},
             )
         ).scalar_one()
         assert after == before

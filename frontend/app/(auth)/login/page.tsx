@@ -5,7 +5,7 @@
  * Dev mode: the backend echoes dev_otp, shown inline for testing.
  */
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   ApiError,
@@ -25,6 +25,7 @@ export default function LoginPage() {
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pendingRole, setPendingRole] = useState<"CLIENT" | "CA" | null>(null);
 
   async function request(e: React.FormEvent) {
     e.preventDefault();
@@ -54,14 +55,20 @@ export default function LoginPage() {
       const me = await fetchMe();
       const role = me.firm !== null ? "CA" : "CLIENT";
       setRoleCookie(role);
-      router.push(role === "CA" ? "/ca" : "/app");
-      router.refresh();
+      setPendingRole(role);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "OTP verification failed");
     } finally {
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (pendingRole !== null) {
+      router.push(pendingRole === "CA" ? "/ca" : "/app");
+      router.refresh();
+    }
+  }, [pendingRole, router]);
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-md flex-col justify-center px-4">
