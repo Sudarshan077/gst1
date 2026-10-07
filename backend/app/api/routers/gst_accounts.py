@@ -106,6 +106,17 @@ async def patch_gst_account(
     return {"success": True, "data": data}
 
 
+@router.get("/{gstin}/months/{fp}/summary")
+async def get_month_summary(
+    gstin: str,
+    fp: str,
+    access: GstinDep,
+    session: SessionDep,
+) -> dict[str, Any]:
+    data = await service.month_summary(session, access.gstin, fp)
+    return {"success": True, "data": data}
+
+
 @router.get("/{gstin}/audit")
 async def get_gstin_audit(
     access: GstinDep,

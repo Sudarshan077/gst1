@@ -82,3 +82,26 @@ class ItcReconciliationOut(BaseModel):
     match_status: str
     confidence: float | None
     remarks: str | None
+
+
+class MonthSummaryOut(BaseModel):
+    """Month card data: doc counts, ledger totals, deadline, nil flag (API_SPEC §2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fp: str
+    status: str
+    gstr1_due_date: str | None = None
+    gstr3b_due_date: str | None = None
+    days_to_deadline: int | None = None
+    doc_count: int
+    confirmed_count: int
+    review_count: int
+    pending_count: int
+    failed_count: int
+    total_taxable_minor: int
+    total_cgst_minor: int
+    total_sgst_minor: int
+    total_igst_minor: int
+    total_cess_minor: int
+    nil_eligible: bool = False

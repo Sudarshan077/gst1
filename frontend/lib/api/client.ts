@@ -97,6 +97,157 @@ export interface EInvoiceDto {
   cancelled_at: string | null;
 }
 
+export interface DocumentJobDto {
+  id: string;
+  status: string;
+  created_at: string | null;
+}
+
+export interface UploadResult {
+  id: string;
+  gstin: string;
+  fp: string;
+  capture_source: string;
+  doc_type: string;
+  sha256: string;
+  bytes: number;
+  page_count: number | null;
+  minio_key: string;
+  uploaded_by: string | null;
+  uploaded_at: string | null;
+  job: DocumentJobDto | null;
+}
+
+export interface DocumentRow {
+  id: string;
+  gstin: string;
+  fp: string;
+  capture_source: string;
+  doc_type: string;
+  sha256: string;
+  bytes: number;
+  page_count: number | null;
+  minio_key: string;
+  uploaded_by: string | null;
+  uploaded_at: string | null;
+  job: DocumentJobDto | null;
+}
+
+export interface DocumentListEnvelope {
+  content: DocumentRow[];
+  page: number;
+  size: number;
+  totalElements: number;
+  last: boolean;
+}
+
+export interface DraftDto {
+  document_id: string;
+  job_id: string;
+  job_status: string;
+  fp: string;
+  capture_source: string;
+  fields: Record<string, unknown>;
+  lines: Record<string, unknown>[];
+  confidence: Record<string, number>;
+  flags: { rule: string; severity: string; message: string }[];
+  auto_confirm: string;
+  confidence_avg: number | null;
+  derived: Record<string, string>;
+}
+
+export async function uploadDocument(
+  gstin: string,
+  fp: string,
+  captureSource: string,
+  file: File,
+  docType = "UNCLASSIFIED",
+): Promise<UploadResult> {
+  const form = new FormData();
+  form.append("capture_source", captureSource);
+  form.append("doc_type", docType);
+  form.append("files", file);
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/documents`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function listDocuments(
+  gstin: string,
+  fp: string,
+  page = 0,
+  size = 20,
+): Promise<DocumentListEnvelope> {
+  return apiFetch(
+    `/gst-accounts/${gstin}/months/${fp}/documents?page=${page}&size=${size}`,
+  );
+}
+
+export async function getDocument(docId: string): Promise<DocumentRow> {
+  return apiFetch(`/documents/${docId}`);
+}
+
+export async function getDraft(docId: string): Promise<DraftDto> {
+  return apiFetch(`/documents/${docId}/draft`);
+}
+
+export async function updateDraft(
+  docId: string,
+  fields: Partial<DraftDto["fields"]>,
+): Promise<DraftDto> {
+  return apiFetch(`/documents/${docId}/draft`, {
+    method: "PUT",
+    body: JSON.stringify(fields),
+  });
+}
+
+export async function confirmDocument(docId: string): Promise<{ invoice_id: string }> {
+  return apiFetch(`/documents/${docId}/confirm`, { method: "POST" });
+}
+
+export async function rejectDocument(docId: string, reason?: string): Promise<unknown> {
+  return apiFetch(`/documents/${docId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function triggerExtraction(docId: string): Promise<{ status: string }> {
+  return apiFetch(`/documents/${docId}/extract`, { method: "POST" });
+}
+
+export async function getGstr1Export(gstin: string, fp: string): Promise<Record<string, unknown>> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/gstr1/export.json`);
+}
+
+export async function getGstr3bExport(gstin: string, fp: string): Promise<Record<string, unknown>> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/gstr3b/export.json`);
+}
+
+export interface MonthSummaryDto {
+  fp: string;
+  status: string;
+  gstr1_due_date: string | null;
+  gstr3b_due_date: string | null;
+  days_to_deadline: number | null;
+  doc_count: number;
+  confirmed_count: number;
+  review_count: number;
+  pending_count: number;
+  failed_count: number;
+  total_taxable_minor: number;
+  total_cgst_minor: number;
+  total_sgst_minor: number;
+  total_igst_minor: number;
+  total_cess_minor: number;
+  nil_eligible: boolean;
+}
+
+export async function getMonthSummary(gstin: string, fp: string): Promise<MonthSummaryDto> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/summary`);
+}
+
 export async function fileGstr1ViaGsp(
   gstin: string,
   fp: string,
@@ -151,7 +302,10 @@ export async function apiFetch<T>(
     headers.set("Authorization", `Bearer ${accessToken}`);
   }
   if (init.body !== undefined && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+    // FormData gets its multipart boundary from the browser; don't override it.
+    if (!(init.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
   }
   // Include cookies on same-origin API calls so the httpOnly refresh token is
   // available to /auth/refresh and auth-state endpoints.

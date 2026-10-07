@@ -85,7 +85,6 @@ async def _seed_doc_with_draft(
     async with sessionmaker() as session:
         user = User(
             email=f"{uuid.uuid4().hex[:9]}@test.local",
-            mobile="9" + uuid.uuid4().hex[:9],
             full_name="DS Co",
         )
         session.add(user)
@@ -148,7 +147,8 @@ async def _seed_doc_with_draft(
 
 
 def _access(gstin: str, user_id: uuid.UUID, role: str = "ADMIN") -> Any:
-    from app.core.access import AccessRole, GstinAccess
+    from app.core.access import GstinAccess
+    from app.db.models.core import AccessRole
 
     return GstinAccess(
         gstin=gstin,

@@ -5,19 +5,69 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.errors import ServiceError
 from app.core.access import GstinAccess, audit, require_gstin_access
 from app.core.auth.dependencies import require_user
 from app.db.models.gst import ExportType, FilingPeriod, FilingStatus, Gstr1Export
 from app.db.session import get_session
 from app.services.returns.gsp_adapter import file_gstr1_gsp, file_gstr3b_gsp
+from app.services.returns.gstr1 import build_gstr1_from_invoices, validate_gstr1_payload
 from app.services.returns.gstr1a import create_gstr1a_amendments
+from app.services.returns.gstr3b import build_gstr3b_from_invoices, validate_gstr3b_payload
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 UserDep = Annotated[uuid.UUID, Depends(require_user)]
 
 router = APIRouter(prefix="/gst-accounts/{gstin}/months/{fp}", tags=["returns"])
+
+@router.get("/gstr1/export.json")
+async def export_gstr1_json(
+    gstin: str,
+    fp: str,
+    access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
+    session: SessionDep,
+) -> dict[str, Any]:
+    from app.db.models.gst import Invoice
+
+    rows = list(
+        (
+            await session.execute(
+                select(Invoice).where(Invoice.gstin == gstin, Invoice.fp == fp)
+            )
+        ).scalars().all()
+    )
+    payload = build_gstr1_from_invoices(gstin, fp, rows)
+    ok, err = validate_gstr1_payload(payload)
+    if not ok:
+        raise ServiceError(f"generated GSTR-1 invalid: {err}", 500, "INTERNAL_ERROR")
+    return {"success": True, "data": payload}
+
+
+@router.get("/gstr3b/export.json")
+async def export_gstr3b_json(
+    gstin: str,
+    fp: str,
+    access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
+    session: SessionDep,
+) -> dict[str, Any]:
+    from app.db.models.gst import Invoice
+
+    rows = list(
+        (
+            await session.execute(
+                select(Invoice).where(Invoice.gstin == gstin, Invoice.fp == fp)
+            )
+        ).scalars().all()
+    )
+    payload = build_gstr3b_from_invoices(gstin, fp, rows)
+    ok, err = validate_gstr3b_payload(payload)
+    if not ok:
+        raise ServiceError(f"generated GSTR-3B invalid: {err}", 500, "INTERNAL_ERROR")
+    return {"success": True, "data": payload}
+
 
 @router.post("/gstr1/prepare")
 async def prepare_gstr1(

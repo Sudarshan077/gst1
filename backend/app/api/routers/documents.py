@@ -12,9 +12,12 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.errors import ServiceError
 from app.api.schemas import DraftFieldUpdateIn, RejectIn
+from app.config import get_settings
 from app.core.access import (
     GstinAccess,
     require_gstin_access,
@@ -22,6 +25,12 @@ from app.core.access import (
 )
 from app.core.auth.dependencies import require_user
 from app.db.session import get_session
+from app.extraction.seed import (
+    SeedLLMClient,
+    auto_invoice_no,
+    seed_ocr_provider,
+)
+from app.extraction.worker import run_job
 from app.services.documents import (
     get_document,
     get_document_detail,
@@ -53,6 +62,64 @@ async def _doc_access(
     doc = await get_document(session, doc_id)
     access = await resolve_gstin_access(session, user_id, doc.gstin)
     return doc, access
+
+
+async def _run_seeded_extraction(
+    session: AsyncSession,
+    doc_id: uuid.UUID,
+    access: GstinAccess,
+) -> Any:
+    """Run the real pipeline with deterministic seed providers (dev mode only)."""
+    from app.db.models.extraction import ExtractionJob
+    from app.db.models.gst import Invoice
+
+    doc = await get_document(session, doc_id)
+    job = (
+        await session.execute(
+            select(ExtractionJob).where(ExtractionJob.document_id == doc_id)
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        raise ServiceError("extraction job not found", 404, "NOT_FOUND")
+
+    existing = (
+        await session.execute(
+            select(Invoice.invoice_no).where(
+                Invoice.gstin == access.gstin, Invoice.fp == doc.fp
+            )
+        )
+    ).scalars().all()
+    existing_set = {str(n) for n in existing if n}
+
+    invoice_no = auto_invoice_no(str(doc_id))
+    if invoice_no in existing_set:
+        invoice_no = f"{invoice_no}-{len(existing_set) + 1}"
+
+    return await run_job(
+        job.id,
+        ocr_provider=seed_ocr_provider,
+        llm_client=SeedLLMClient(access.gstin, invoice_no, "2026-09-15"),
+    )
+
+
+@router.post("/documents/{doc_id}/extract", include_in_schema=get_settings().dev_mode)
+async def run_doc_extraction(
+    doc_id: uuid.UUID,
+    user_id: UserDep,
+    session: SessionDep,
+) -> dict[str, Any]:
+    """Dev-only synchronous extraction trigger. Queued job is run in-request."""
+    if not get_settings().dev_mode:
+        raise ServiceError("not available", 404, "NOT_FOUND")
+    doc, access = await _doc_access(session, user_id, doc_id)
+    if not access.can_write:
+        from app.core.access import PermissionDenied
+
+        raise PermissionDenied("extraction requires FILER or ADMIN on the GSTIN")
+    result = await _run_seeded_extraction(session, doc_id, access)
+    if result is None:
+        raise ServiceError("extraction job not found", 404, "NOT_FOUND")
+    return {"success": True, "data": {"status": result.error or "ok"}}
 
 
 @router.get("/gst-accounts/{gstin}/months/{fp}/review-queue")

@@ -25,7 +25,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from tests.auth_helpers import register_and_login
+from tests.auth_helpers import make_email, register_and_login
 from tests.gstin_fixtures import gstin_checksum_valid
 from tests.v4_helpers import seed_account
 
@@ -253,7 +253,7 @@ async def test_dpdp_me_routes_fail_without_gstin(
     client: AsyncClient, api_sessionmaker: SessionMaker
 ) -> None:
     """A user with no GSTIN cannot hit /me/data endpoints with a fabricated default."""
-    tokens = await register_and_login(client, "9" + "123456789")
+    tokens = await register_and_login(client, make_email())
     user_id = verify_access_token(tokens["access_token"])
     stepup = create_stepup_token(user_id)
     resp = await client.post(

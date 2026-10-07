@@ -12,11 +12,13 @@ import { ShellNav } from "@/components/shared/ShellNav";
 import { ApiError, fetchMe, setAccessToken, silentRefresh } from "@/lib/api/client";
 import type { MeDto } from "@/lib/api/client";
 import { clearSession } from "@/lib/auth/session";
+import Link from "next/link";
 
 export default function ClientHomePage() {
   const router = useRouter();
   const [me, setMe] = useState<MeDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const currentFp = "092026"; // default demo period (MMYYYY)
 
   useEffect(() => {
     let cancelled = false;
@@ -93,8 +95,24 @@ export default function ClientHomePage() {
                     {acc.gstin}
                   </div>
                 </div>
-                <div className="text-sm text-slate-500 dark:text-slate-400">
-                  {acc.role}
+                <div className="flex items-center gap-3">
+                  <Link
+                    href={`/app/upload/${acc.gstin}/${currentFp}`}
+                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700"
+                    data-testid="upload-link"
+                  >
+                    Upload
+                  </Link>
+                  <Link
+                    href={`/app/file/${acc.gstin}/${currentFp}`}
+                    className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                    data-testid="documents-link"
+                  >
+                    Documents
+                  </Link>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">
+                    {acc.role}
+                  </div>
                 </div>
               </div>
             ))

@@ -20,9 +20,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from tests.auth_helpers import register_and_login
+from tests.auth_helpers import make_email, register_and_login
 from tests.gstin_fixtures import gstin_checksum_valid, make_gstin, make_pan
-from tests.v4_helpers import _mobile, guard_app, seed_account
+from tests.v4_helpers import guard_app, seed_account
 
 pytestmark = pytest.mark.asyncio
 
@@ -45,7 +45,7 @@ async def test_gstin_service_derives_pan_and_state_from_gstin(
 ) -> None:
     """v4: the caller never supplies a PAN — it is GSTIN[2:12]."""
     gstin = make_gstin(state_code="29")
-    tokens = await register_and_login(client, _mobile())
+    tokens = await register_and_login(client, make_email())
     user_id = verify_access_token(tokens["access_token"])
     async with api_sessionmaker() as session:
         account = await gstin_service.create_gst_account(
@@ -63,7 +63,7 @@ async def test_invalid_gstin_checksum_rejected(
 
     good = make_gstin()
     bad = good[:14] + ("0" if good[14] != "0" else "1")
-    tokens = await register_and_login(client, _mobile())
+    tokens = await register_and_login(client, make_email())
     user_id = verify_access_token(tokens["access_token"])
     async with api_sessionmaker() as session:
         with pytest.raises(ServiceError) as exc:
@@ -108,9 +108,9 @@ async def test_cross_tenant_matrix(
     )
 
     # FILER and VIEWER collaborators on the owner's GSTIN.
-    filer_tokens = await register_and_login(client, _mobile())
+    filer_tokens = await register_and_login(client, make_email())
     filer_id = verify_access_token(filer_tokens["access_token"])
-    viewer_tokens = await register_and_login(client, _mobile())
+    viewer_tokens = await register_and_login(client, make_email())
     viewer_id = verify_access_token(viewer_tokens["access_token"])
 
     async with api_sessionmaker() as session:
@@ -241,7 +241,7 @@ async def test_revoke_is_instant_access_death(
     owner_tokens, account = await seed_account(client, api_sessionmaker)
     owner_id = verify_access_token(owner_tokens["access_token"])
 
-    collab_tokens = await register_and_login(client, _mobile())
+    collab_tokens = await register_and_login(client, make_email())
     collab_id = verify_access_token(collab_tokens["access_token"])
     email = f"collab+{uuid.uuid4().hex[:8]}@example.com"
     async with api_sessionmaker() as session:
@@ -312,7 +312,7 @@ async def test_guard_denial_leaves_no_audit_row_and_grant_does(
         client, api_sessionmaker, legal_name="Audit Co"
     )
     owner_id = verify_access_token(owner_tokens["access_token"])
-    outsider = await register_and_login(client, _mobile())
+    outsider = await register_and_login(client, make_email())
 
     app = guard_app(api_sessionmaker)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:

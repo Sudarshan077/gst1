@@ -400,3 +400,89 @@ def _audit_out(row: AuditLog) -> dict[str, Any]:
 
 def _iso(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
+
+
+async def month_summary(
+    session: AsyncSession,
+    gstin: str,
+    fp: str,
+) -> dict[str, Any]:
+    """GET /gst-accounts/{gstin}/months/{fp}/summary — dashboard month card."""
+    from app.db.models.extraction import Document, ExtractionJob, JobStatus
+    from app.db.models.gst import FilingPeriod, Invoice
+
+    period = await session.get(FilingPeriod, (gstin, fp))
+    period_status = period.status.value if period else "OPEN"
+    gstr1_due = period.gstr1_due_date if period else None
+    gstr3b_due = period.gstr3b_due_date if period else None
+
+    docs = (
+        await session.execute(
+            select(Document.id, Document.doc_type)
+            .where(Document.gstin == gstin, Document.fp == fp)
+        )
+    ).all()
+    doc_ids = [d.id for d in docs]
+    doc_count = len(doc_ids)
+
+    job_rows = (
+        await session.execute(
+            select(ExtractionJob.status).where(ExtractionJob.document_id.in_(doc_ids))
+        )
+    ).all() if doc_ids else []
+    statuses = [r.status for r in job_rows]
+    confirmed_count = sum(1 for s in statuses if s == JobStatus.CONFIRMED)
+    review_count = sum(1 for s in statuses if s == JobStatus.NEEDS_REVIEW)
+    pending_set = {
+        JobStatus.QUEUED,
+        JobStatus.PREPROCESS,
+        JobStatus.OCR_RUNNING,
+        JobStatus.LLM_RUNNING,
+        JobStatus.EXTRACTED,
+    }
+    pending_count = sum(1 for s in statuses if s in pending_set)
+    failed_count = sum(1 for s in statuses if s == JobStatus.FAILED)
+
+    invoices = (
+        await session.execute(
+            select(Invoice).where(Invoice.gstin == gstin, Invoice.fp == fp)
+        )
+    ).scalars().all()
+    totals = {
+        "taxable": 0,
+        "cgst": 0,
+        "sgst": 0,
+        "igst": 0,
+        "cess": 0,
+    }
+    for inv in invoices:
+        for line in inv.lines:
+            totals["taxable"] += line.taxable_value_minor
+            totals["cgst"] += line.cgst_minor
+            totals["sgst"] += line.sgst_minor
+            totals["igst"] += line.igst_minor
+            totals["cess"] += line.cess_minor
+
+    days_to_deadline = None
+    from datetime import date as _date
+    if gstr1_due is not None:
+        days_to_deadline = (gstr1_due - _date.today()).days
+
+    return {
+        "fp": fp,
+        "status": period_status,
+        "gstr1_due_date": _iso(gstr1_due),
+        "gstr3b_due_date": _iso(gstr3b_due),
+        "days_to_deadline": days_to_deadline,
+        "doc_count": doc_count,
+        "confirmed_count": confirmed_count,
+        "review_count": review_count,
+        "pending_count": pending_count,
+        "failed_count": failed_count,
+        "total_taxable_minor": totals["taxable"],
+        "total_cgst_minor": totals["cgst"],
+        "total_sgst_minor": totals["sgst"],
+        "total_igst_minor": totals["igst"],
+        "total_cess_minor": totals["cess"],
+        "nil_eligible": doc_count == 0,
+    }

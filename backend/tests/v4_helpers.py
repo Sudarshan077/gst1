@@ -10,7 +10,6 @@ raw INSERTs) and GSTINs are always mod-36 valid synthetic fixtures.
 # with postponed annotations FastAPI cannot resolve those names from the module
 # namespace and silently turns the guarded parameter into a required *query*
 # param ("query.access: Field required") instead of a Depends().
-import random
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Annotated, Any
@@ -29,8 +28,12 @@ from tests.gstin_fixtures import make_gstin
 SessionMaker = async_sessionmaker[Any]
 
 
+def _email() -> str:
+    return f"{uuid.uuid4().hex[:10]}@test.local"
+
+
 def _mobile() -> str:
-    return "9" + "".join(random.SystemRandom().choice("0123456789") for _ in range(9))
+    return _email()
 
 
 async def seed_account(
@@ -46,7 +49,7 @@ async def seed_account(
 
     The creator becomes ADMIN on the GSTIN (v4: no business/registration layer).
     """
-    tokens = await register_and_login(client, _mobile())
+    tokens = await register_and_login(client, _email())
     user_id = verify_access_token(tokens["access_token"])
     async with sessionmaker() as session:
         account = await create_gst_account(
