@@ -98,23 +98,32 @@ async def patch_gst_account(
         session,
         access.gstin,
         access.role,
+        legal_name=body.legal_name,
         trade_name=body.trade_name,
         registered_address=body.registered_address,
         aato_minor=body.aato_minor,
         filing_scheme=scheme,
+        actor_user_id=access.user_id,
     )
     return {"success": True, "data": data}
 
 
-@router.get("/{gstin}/months/{fp}/summary")
-async def get_month_summary(
-    gstin: str,
-    fp: str,
+@router.get("/{gstin}/overview")
+async def get_gst_account_overview(
     access: GstinDep,
     session: SessionDep,
 ) -> dict[str, Any]:
-    data = await service.month_summary(session, access.gstin, fp)
-    return {"success": True, "data": data}
+    detail = await service.get_gst_account_detail(session, access.gstin, access.role)
+    periods = await service.get_this_fy_period_statuses(session, access.gstin)
+    return {
+        "success": True,
+        "data": {
+            "gstin": access.gstin,
+            "fy": service.current_fy_label(),
+            "detail": detail,
+            "periods": periods,
+        },
+    }
 
 
 @router.get("/{gstin}/audit")

@@ -25,6 +25,7 @@ class GstAccountCreateIn(BaseModel):
 class GstAccountPatchIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    legal_name: str | None = Field(default=None, min_length=1, max_length=255)
     trade_name: str | None = Field(default=None, max_length=255)
     registered_address: str | None = Field(default=None, max_length=1000)
     aato_minor: int | None = Field(default=None, ge=0, description="AATO in paise")

@@ -154,6 +154,8 @@ async def update_gst_account(
     gstin: str,
     role: AccessRole,
     *,
+    actor_user_id: uuid.UUID | None = None,
+    legal_name: str | None = None,
     trade_name: str | None = None,
     registered_address: str | None = None,
     aato_minor: int | None = None,
@@ -162,11 +164,15 @@ async def update_gst_account(
     """PATCH /gst-accounts/{gstin} — partial update; keeps IRN threshold live."""
     account = await get_gst_account(session, gstin)
     before = {
+        "legal_name": account.legal_name,
         "trade_name": account.trade_name,
+        "registered_address": account.registered_address,
         "aato_latest_minor": account.aato_latest_minor,
         "filing_scheme": account.filing_scheme.value,
     }
 
+    if legal_name is not None:
+        account.legal_name = legal_name
     if trade_name is not None:
         account.trade_name = trade_name
     if registered_address is not None:
@@ -182,12 +188,14 @@ async def update_gst_account(
         action="GSTIN_UPDATED",
         entity="gst_account",
         entity_id=account.gstin,
-        actor_user_id=None,
+        actor_user_id=actor_user_id,
         gstin=account.gstin,
         payload_diff={
             "before": before,
             "after": {
+                "legal_name": account.legal_name,
                 "trade_name": account.trade_name,
+                "registered_address": account.registered_address,
                 "aato_latest_minor": account.aato_latest_minor,
                 "filing_scheme": account.filing_scheme.value,
             },
@@ -401,6 +409,53 @@ def _audit_out(row: AuditLog) -> dict[str, Any]:
 
 def _iso(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
+
+
+async def get_this_fy_period_statuses(
+    session: AsyncSession, gstin: str
+) -> list[dict[str, Any]]:
+    """Return all 12 periods of the current FY with their status (OPEN if absent)."""
+    from datetime import date
+
+    from app.db.models.gst import FilingPeriod
+
+    today = date.today()
+    fy_start_year = today.year if today.month >= 4 else today.year - 1
+    fps = [f"{m:02d}{fy_start_year}" for m in range(4, 16)]
+
+    rows = (
+        await session.execute(
+            select(FilingPeriod).where(
+                FilingPeriod.gstin == gstin.strip().upper(),
+                FilingPeriod.fp.in_(fps),
+            )
+        )
+    ).scalars().all()
+    by_fp = {row.fp: row for row in rows}
+
+    result: list[dict[str, Any]] = []
+    for fp in fps:
+        period = by_fp.get(fp)
+        result.append(
+            {
+                "fp": fp,
+                "status": period.status.value if period else "OPEN",
+                "gstr1_due_date": _iso(period.gstr1_due_date) if period else None,
+                "gstr3b_due_date": _iso(period.gstr3b_due_date) if period else None,
+                "locked_at": _iso(period.locked_at) if period else None,
+                "filed_at": _iso(period.filed_at) if period else None,
+            }
+        )
+    return result
+
+
+def current_fy_label() -> str:
+    """Return label like '2026-27' for the current Indian FY."""
+    from datetime import date
+
+    today = date.today()
+    start = today.year if today.month >= 4 else today.year - 1
+    return f"{start}-{str(start + 1)[-2:]}"
 
 
 async def month_summary(
