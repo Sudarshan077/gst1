@@ -295,7 +295,7 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
             Loopback peers are therefore excluded from the liveness signal.
             """
             conns = []
-            for pid in tree_pids(root_pid):
+            for pid in all_agent_pids():
                 try:
                     for c in psutil.Process(pid).net_connections(kind="tcp"):
                         if c.status != psutil.CONN_ESTABLISHED or not c.raddr:
@@ -309,9 +309,9 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
             return conns
 
         def tree_io(root_pid: int) -> int:
-            """Total disk I/O bytes (read + write) across the agent tree."""
+            """Total disk I/O bytes (read + write) across the whole agent tree."""
             total = 0
-            for pid in tree_pids(root_pid):
+            for pid in all_agent_pids():
                 try:
                     io = psutil.Process(pid).io_counters()
                     total += io.read_bytes + io.write_bytes
@@ -320,9 +320,9 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
             return total
 
         def tree_mem(root_pid: int) -> int:
-            """Total RSS memory (bytes) across the agent tree."""
+            """Total RSS memory (bytes) across the whole agent tree."""
             total = 0
-            for pid in tree_pids(root_pid):
+            for pid in all_agent_pids():
                 try:
                     total += psutil.Process(pid).memory_info().rss
                 except (psutil.Error, OSError):
@@ -389,12 +389,24 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
                 io_delta = io_now - io_start
                 mem_now = tree_mem(proc.pid)
                 mem_delta = mem_now - mem_start
-                # Stuck = ALL signals flat: no CPU, no active TCP, no I/O, no mem growth
+                # A live process can never DECREASE its cumulative CPU counter or
+                # have its whole tree's disk I/O / RSS shrink. A negative delta
+                # means the PID set changed between samples (a short-lived child
+                # exited and its totals dropped out of the sum), NOT that the
+                # agent is idle. Treating "< threshold" as flat then made
+                # `all_flat` true for a perfectly healthy agent and killed it
+                # (observed: STUCK after 240s and 720s with CPU=-17.3s/-23.1s,
+                # IO_delta=-52MB/-76MB, MEM_delta=-27MB/-68MB, while the builder
+                # was streaming a real reply). Only a genuinely flat-or-growing
+                # signal counts as inactive.
+                def flat(delta: float) -> bool:
+                    return 0 <= delta < STUCK_MIN_CPU
+
                 all_flat = (
-                    window_cpu < STUCK_MIN_CPU
+                    flat(window_cpu)
                     and len(net_conns) == 0
-                    and io_delta < STUCK_MIN_IO_DELTA
-                    and mem_delta < STUCK_MIN_MEM_DELTA
+                    and 0 <= io_delta < STUCK_MIN_IO_DELTA
+                    and 0 <= mem_delta < STUCK_MIN_MEM_DELTA
                 )
                 if all_flat:
                     log(f"  ✗ {model} STUCK {now_t - t0:.0f}s in — "
