@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -137,6 +139,36 @@ class ProfileEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
     success: bool = True
     data: UserOut
+
+
+class SessionInfoOut(BaseModel):
+    """Live refresh-family state for /me/settings (PHASE8 8.2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    active_sessions: int
+    refresh_ttl_days: int
+
+
+class SettingsOut(BaseModel):
+    """GET/PATCH /me/settings aggregate (PHASE8 8.2).
+
+    Read-only consolidation of existing state: the users.notification_preferences
+    column, TOTP enablement, and the live Redis refresh-family count. The PATCH
+    path delegates to the /me/notification-prefs handler (no duplicated writes).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    notification_preferences: dict[str, Any] = {}
+    totp_enabled: bool
+    session: SessionInfoOut
+
+
+class SettingsEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    success: bool = True
+    data: SettingsOut
 
 
 class EnvelopeError(BaseModel):

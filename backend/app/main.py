@@ -25,6 +25,7 @@ from app.api.routers.itc import router as itc_router
 from app.api.routers.notifications import router as notifications_router
 from app.api.routers.profile import router as profile_router
 from app.api.routers.returns import router as returns_router
+from app.api.routers.settings import router as settings_router
 from app.core.auth.errors import AuthError
 
 Handler = Callable[[Request, Exception], Awaitable[JSONResponse]]
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
     routers = (
         auth_router,
         profile_router,
+        settings_router,
         gst_accounts_router,
         documents_router,
         itc_router,
