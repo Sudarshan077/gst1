@@ -3,8 +3,8 @@
 **Repo:** `github.com/Sudarshan077/gst1` · **Branch:** `main`  
 **Stack:** Python 3.11 (FastAPI · SQLAlchemy · Alembic · PostgreSQL) backend · Next.js 16 + TypeScript (App Router · Tailwind · shadcn/ui) frontend  
 **Build mode:** 3-agent loop — Builder / Tester / Monitor. Every task is independently verified by the Tester (real command output: pytest, ruff, mypy, tsc, Playwright) before the Monitor may ADVANCE it. Backend and frontend are built together in the same loop.  
-**Last updated:** 2026-10-08 12:24 IST  
-**Progress:** **48 / 48 tasks done (100%)**
+**Last updated:** 2026-10-08 13:53 IST  
+**Progress:** **48 / 59 tasks done (81%)**
 
 ---
 
@@ -20,7 +20,8 @@
 | 5 | Deployment, Compliance & Go-Live (Free/OSS-only) | 5 | 5 | 0 | ✅ Complete |
 | 6 | Verification Sweep (re-test every prior phase with elite models; Tony, 6 Oct) | 6 | 6 | 0 | ✅ Complete |
 | 7 | UX/Core Flow Redesign (email-only auth, single user, upload-to-output) — Tony, 6 Oct | 3 | 3 | 0 | ✅ Complete |
-| **Total** | | **48** | **48** | **0** | |
+| 8 | Product Completeness: Profile, Settings, Business Management & Filing-Ready Returns — Tony, 8 Oct | 11 | 0 | 11 | 🔄 In progress |
+| **Total** | | **59** | **48** | **11** | |
 
 ---
 
@@ -113,6 +114,22 @@
 | 7.1A | USER MODEL REDESIGN (backend): single email-only user, no CA/owner split | ✅ Done | `AUTH_SPEC.md`, `DB_SCHEMA.md` |
 | 7.1B | AUTH FLOW REDESIGN: email-only login (no mobile field) end-to-end | ✅ Done | `AUTH_SPEC.md` |
 | 7.2 | UX: 'upload file -> get output' happy path | ✅ Done | `EXTRACTION_PIPELINE.md`, `UI_SPEC.md` |
+
+### Phase 8 — Product Completeness: Profile, Settings, Business Management & Filing-Ready Returns — Tony, 8 Oct
+
+| ID | Task | Status | Source docs |
+|---|---|---|---|
+| 8.1 | Backend: User Profile API (GET/PATCH /me/profile, email read-only, audit) | 🔄 In progress | `PHASE8_PRODUCT_COMPLETENESS.md`, `API_SPECIFICATION.md`, `SECURITY_AND_ACCESS.md` |
+| 8.2 | Backend: Settings API (GET /me/settings aggregate, PATCH delegates to prefs) | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `API_SPECIFICATION.md` |
+| 8.3 | Backend: Business (GSTIN) management — editable fields + GET /gst-accounts/{gstin}/overview | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `TECHNICAL_ARCHITECTURE.md` |
+| 8.4 | Backend: Returns generate pipeline + real .xlsx export + HSN summary + pre-file validation | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `EXTRACTION_SPEC.md` |
+| 8.5 | Frontend: persistent app shell nav (Dashboard/Businesses/Upload/Returns/Profile/Settings + GSTIN switcher) | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
+| 8.6 | Frontend: Profile screen (/app/profile) — view + inline edit full_name, email read-only | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
+| 8.7 | Frontend: Settings screen (/app/settings) — notification prefs, security/TOTP, session | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
+| 8.8 | Frontend: Manage businesses (/app/businesses list+add, /app/businesses/[gstin] detail+edit) | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
+| 8.9 | Frontend: Returns workspace — generate step, JSON/Excel format picker, HSN table, pre-file validation checklist | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
+| 8.10 | Frontend: Dashboard filing-status tracker (per GSTIN x period roll-up) on /app | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
+| 8.11 | Phase-8 E2E + full regression (3-lens) + reachability audit | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `VERIFICATION_SWEEP.md` |
 
 ---
 
