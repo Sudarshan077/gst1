@@ -118,6 +118,27 @@ class MeEnvelope(BaseModel):
     data: MeOut
 
 
+class ProfilePatchIn(BaseModel):
+    """PATCH /me/profile body — full_name ONLY (PHASE8 8.1).
+
+    extra="forbid" makes an {email: ...} (or any other field) a 422 at the
+    validation layer — email is the login credential and read-only, never
+    silently ignored.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str = Field(min_length=1, max_length=255)
+
+
+class ProfileEnvelope(BaseModel):
+    """GET/PATCH /me/profile response — same UserDto shape as /auth/me."""
+
+    model_config = ConfigDict(extra="forbid")
+    success: bool = True
+    data: UserOut
+
+
 class EnvelopeError(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

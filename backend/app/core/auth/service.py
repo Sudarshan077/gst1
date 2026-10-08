@@ -8,6 +8,7 @@ import uuid
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.access import audit
 from app.core.auth import otp as otp_svc
 from app.core.auth import tokens as token_svc
 from app.core.auth import totp as totp_svc
@@ -182,3 +183,41 @@ async def me(session: AsyncSession, user_id: uuid.UUID) -> dict[str, object]:
             for gstin, role, legal_name in rows
         ],
     }
+
+
+async def get_profile(session: AsyncSession, user_id: uuid.UUID) -> dict[str, object]:
+    """GET /me/profile — the caller's own profile (PHASE8 8.1).
+
+    Returns the same user shape as /auth/me's `data.user`.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise TokenInvalid("user no longer exists")
+    return _user_out(user)
+
+
+async def update_profile(
+    session: AsyncSession, user_id: uuid.UUID, full_name: str
+) -> dict[str, object]:
+    """PATCH /me/profile — edit own full_name; email is read-only (PHASE8 8.1).
+
+    The route's ProfilePatchIn (extra="forbid") already rejects an email patch
+    as 422; this function only ever touches full_name. Writes one append-only
+    audit row (PROFILE_UPDATED) in the same transaction as the edit.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise TokenInvalid("user no longer exists")
+
+    old_name = user.full_name
+    user.full_name = full_name.strip()
+    await audit(
+        session,
+        action="PROFILE_UPDATED",
+        entity="user",
+        entity_id=str(user.id),
+        actor_user_id=user_id,
+        payload_diff={"full_name": {"old": old_name, "new": user.full_name}},
+    )
+    await session.commit()
+    return _user_out(user)

@@ -33,11 +33,12 @@
 | POST | `/auth/totp/verify` | (JWT) + `{code}` | `{enabled: true}` | mandatory before firm join |
 | GET | `/auth/me` | (JWT) | `{user, gst_accounts: [{gstin, role, legal_name}]}` | returns user and all accessible GSTINs with roles |
 
-## 2. Users & GST Accounts — `/users`, `/gst-accounts`
+## 2. Users & GST Accounts — `/me/profile`, `/gst-accounts`
 
 | Method | Path | Notes |
 |---|---|---|
-| GET/PATCH | `/users/me` | profile update |
+| GET | `/me/profile` | (JWT) own profile; same user shape as `/auth/me`'s `data.user`; email read-only (PHASE8 8.1) |
+| PATCH | `/me/profile` | (JWT) `{full_name}` only — any other field (incl. `email`) → 422, never silent; audit `PROFILE_UPDATED` |
 | POST | `/gst-accounts` | `{gstin, legal_name, trade_name?, registered_address?, aato_minor?}` — full GSTIN validation (mod-36 + PAN extraction from chars 3-12); sets `filing_scheme`, `irn_applicable`; creator becomes ADMIN |
 | GET | `/gst-accounts` | my GSTINs (via user_gst_access) with role |
 | GET | `/gst-accounts/{gstin}` | detail incl. scheme/irn flags |
