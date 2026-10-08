@@ -284,13 +284,26 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
         # This lets us safely check every 120s instead of 600s.
 
         def tree_net_connections(root_pid: int) -> list:
-            """Active TCP connections across the whole agent tree."""
+            """Active REMOTE TCP connections across the whole agent tree.
+
+            Only connections to a non-loopback peer count as evidence the agent
+            is 'waiting on the API'. The agent process keeps one or two
+            ESTABLISHED sockets to the LOCAL Hermes gateway (127.0.0.1 / ::1);
+            those stay up even after the upstream model socket has died, so
+            counting them made a dead route read as alive forever (a monitor sat
+            29 min on a ~2.5 min median with only localhost sockets open).
+            Loopback peers are therefore excluded from the liveness signal.
+            """
             conns = []
             for pid in tree_pids(root_pid):
                 try:
                     for c in psutil.Process(pid).net_connections(kind="tcp"):
-                        if c.status == psutil.CONN_ESTABLISHED:
-                            conns.append((pid, c.laddr, c.raddr, c.status))
+                        if c.status != psutil.CONN_ESTABLISHED or not c.raddr:
+                            continue
+                        peer = str(c.raddr.ip) if hasattr(c.raddr, "ip") else str(c.raddr[0])
+                        if peer.startswith("127.") or peer in ("::1", "0.0.0.0", "::"):
+                            continue  # local gateway socket, not the model API
+                        conns.append((pid, c.laddr, c.raddr, c.status))
                 except (psutil.Error, OSError):
                     pass
             return conns
@@ -431,24 +444,31 @@ RUNTIME_FAIL_MARKERS = (
 def agent_failed(model, provider, out: str) -> bool:
     """True when the child agent produced no usable work (dead route / auth wall).
 
-    Distinguishes a dead upstream from a model that merely replied poorly: a
-    route that never emitted any assistant text AND shows an auth/quota marker is
-    dead, so the chain should move on rather than hand an empty report to the
-    Tester (which is what makes the Tester emit WEAK evidence).
+    A route is dead only when it produced NO usable output and shows a real
+    auth/quota marker, or it emitted essentially nothing at all. A long,
+    coherent report is a successful run even if it happens to mention a number
+    like '403' while describing the code — so the marker only counts against a
+    SHORT/empty report.
+
+    Historical bug this guards against: an earlier version also required the
+    literal string "session_id:" as proof of a healthy run, but the child agents
+    never emit it. That made every primary rung read as FAILED AT RUNTIME even
+    though it exited 0 and committed its work (e.g. glm-5.3 committed task 8.1 at
+    14:00:59 and was discarded), costing a full redundant walk of the chain
+    (~4-10 min) on every task. Do not re-introduce a mandatory session marker.
     """
     text = (out or "").strip()
     if not text:
         return True
-    if "TIMEOUT" in text[:40]:
+    if "TIMEOUT" in text[:40] or text.startswith("SPAWN FAILED"):
         return True
     low = text.lower()
     has_marker = any(m in low for m in RUNTIME_FAIL_MARKERS)
-    # a healthy run always records a session id
-    has_session = "session_id:" in low
-    if has_marker and not has_session:
-        return True
-    # an almost-empty report is not a build attempt
-    return len(text) < 400 and has_marker
+    # A substantial report is real work regardless of incidental numbers in it.
+    if len(text) >= 400:
+        return False
+    # Short output: it is only a dead route if it actually carries a failure marker.
+    return has_marker
 
 
 def run_role(role: str, chain, prompt, roles_path_fallback=None, timeout=1800, start=None):
