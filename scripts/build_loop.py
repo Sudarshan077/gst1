@@ -70,17 +70,17 @@ ROLES_PATH = os.path.join(BUILD_DIR, "role_models.json")
 # is a regression, not a failover improvement.
 ROLE_CHAINS = {
     "builder": [
-        ("kimi-k2.7-code", "ollama-cloud"),
         ("glm-5.3", "ollama-cloud"),
         ("kimi-k3", "ollama-cloud"),
+        ("kimi-k2.7-code", "ollama-cloud"),
     ],
     "tester": [
         ("glm-5.3-flash", "ollama-cloud"),
         ("minimax-m2.7", "ollama-cloud"),
         ("kimi-k2.6", "ollama-cloud"),
     ],
-    # Monitor = deepseek-v4.1-flash on ollama-cloud (Tony, 5 Oct). Kept INDEPENDENT
-    # of the Tester route so the pass/fail judgement does not come from the same
+    # Monitor = deepseek-v4.1-flash on ollama-cloud. Kept INDEPENDENT of the
+    # Tester route so the pass/fail judgement does not come from the same
     # upstream that produced the verification evidence.
     "monitor": [
         ("deepseek-v4.1-flash", "ollama-cloud"),
@@ -90,8 +90,8 @@ ROLE_CHAINS = {
 
 # Builder-feedback / rework model chain (used to turn tester findings into a fix).
 FEEDBACK_CHAIN = [
-    ("kimi-k2.7-code", "ollama-cloud"),
     ("glm-5.3", "ollama-cloud"),
+    ("kimi-k2.7-code", "ollama-cloud"),
 ]
 
 # Routes that currently answer with a LOCAL STUB rather than the real upstream:
