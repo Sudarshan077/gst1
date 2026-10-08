@@ -475,3 +475,66 @@ export async function totpVerify(code: string): Promise<TotpVerifyResult> {
 export async function listGstAccounts(): Promise<GstAccountDto[]> {
   return apiFetch("/gst-accounts");
 }
+
+/** POST /gst-accounts body — PHASE8 8.8 add-GSTIN form (server re-validates). */
+export interface GstAccountCreatePayload {
+  gstin: string;
+  legal_name: string;
+  trade_name?: string;
+  registered_address?: string;
+  filing_scheme?: string;
+}
+
+export async function addGstAccount(
+  payload: GstAccountCreatePayload,
+): Promise<GstAccountDto> {
+  return apiFetch("/gst-accounts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getGstAccount(gstin: string): Promise<GstAccountDto> {
+  return apiFetch(`/gst-accounts/${gstin}`);
+}
+
+/** PATCH /gst-accounts/{gstin} body — business fields (PHASE8 8.3/8.8). */
+export interface GstAccountPatchPayload {
+  legal_name?: string;
+  trade_name?: string;
+  registered_address?: string;
+  filing_scheme?: string;
+}
+
+export async function updateGstAccount(
+  gstin: string,
+  payload: GstAccountPatchPayload,
+): Promise<GstAccountDto> {
+  return apiFetch(`/gst-accounts/${gstin}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** GET /gst-accounts/{gstin}/overview — detail + this-FY periods (8.3). */
+export interface FyPeriodStatus {
+  fp: string;
+  status: string;
+  gstr1_due_date: string | null;
+  gstr3b_due_date: string | null;
+  locked_at: string | null;
+  filed_at: string | null;
+}
+
+export interface GstAccountOverviewDto {
+  gstin: string;
+  fy: string;
+  detail: GstAccountDto;
+  periods: FyPeriodStatus[];
+}
+
+export async function getGstAccountOverview(
+  gstin: string,
+): Promise<GstAccountOverviewDto> {
+  return apiFetch(`/gst-accounts/${gstin}/overview`);
+}
