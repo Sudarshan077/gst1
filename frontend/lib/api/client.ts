@@ -225,6 +225,116 @@ export async function getGstr3bExport(gstin: string, fp: string): Promise<Record
   return apiFetch(`/gst-accounts/${gstin}/months/${fp}/gstr3b/export.json`);
 }
 
+/* ------------------------------------------------------------------ *
+ * PHASE8 8.4 — returns generate pipeline + format export + HSN +
+ * pre-file validation (PHASE8_PRODUCT_COMPLETENESS.md §3.8.4).
+ * Money is integer paise everywhere; rupee conversion happens only at
+ * render in lib/format-style helpers inside the page.
+ */
+
+/** One return's status in the POST /returns/generate envelope. */
+export interface GeneratedReturnStatus {
+  status: "READY" | "FAILED";
+  invoice_count: number;
+  totals: PaiseTotals | Record<string, never>;
+  error?: string;
+}
+
+/** Paise-integer totals shared by generate / HSN rows / HSN totals. */
+export interface PaiseTotals {
+  txval_paise: number;
+  iamt_paise: number;
+  camt_paise: number;
+  samt_paise: number;
+  csamt_paise: number;
+}
+
+export interface ReturnsGenerateResult {
+  gstin: string;
+  fp: string;
+  returns: { gstr1: GeneratedReturnStatus; gstr3b: GeneratedReturnStatus };
+  gstr1_export_id: string | null;
+}
+
+export async function generateReturns(
+  gstin: string,
+  fp: string,
+): Promise<ReturnsGenerateResult> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/returns/generate`, {
+    method: "POST",
+  });
+}
+
+/** HSN summary row (GET /gstr1/hsn-summary). */
+export interface HsnSummaryRow extends PaiseTotals {
+  hsn_sac: string;
+  rt: number;
+  num_of_lines: number;
+}
+
+export interface HsnSummaryResult {
+  rows: HsnSummaryRow[];
+  totals: PaiseTotals;
+}
+
+export async function getHsnSummary(
+  gstin: string,
+  fp: string,
+): Promise<HsnSummaryResult> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/gstr1/hsn-summary`);
+}
+
+/** Pre-filing validation finding (GET /returns/validation). */
+export interface ValidationFinding {
+  rule: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+export interface ReturnsValidationResult {
+  blocking: ValidationFinding[];
+  warnings: ValidationFinding[];
+}
+
+export async function getReturnsValidation(
+  gstin: string,
+  fp: string,
+): Promise<ReturnsValidationResult> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/returns/validation`);
+}
+
+/**
+ * Download the server-rendered .xlsx for a return form. The file is built
+ * in-process by the backend (openpyxl, OSS) from the SAME payload as the
+ * JSON export — single source of truth, so numbers cannot disagree.
+ */
+export async function downloadReturnXlsx(
+  gstin: string,
+  fp: string,
+  form: "gstr1" | "gstr3b",
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/gst-accounts/${gstin}/months/${fp}/${form}/export.xlsx`,
+    {
+      headers:
+        accessToken !== null ? { Authorization: `Bearer ${accessToken}` } : {},
+      credentials: "include",
+    },
+  );
+  if (!res.ok) {
+    throw new ApiError("DOWNLOAD_FAILED", `export failed (${res.status})`, res.status);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${form.toUpperCase()}-${gstin}-${fp}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export interface MonthSummaryDto {
   fp: string;
   status: string;
