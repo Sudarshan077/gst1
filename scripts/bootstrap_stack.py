@@ -214,8 +214,6 @@ def start_redis() -> None:
             str(REDIS_PORT),
             "--dir",
             str(REDIS_DIR),
-            "--save",
-            "",
             "--appendonly",
             "no",
         ],

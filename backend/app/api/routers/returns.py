@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.errors import ServiceError
 from app.core.access import GstinAccess, audit, require_gstin_access
@@ -35,7 +36,9 @@ async def export_gstr1_json(
     rows = list(
         (
             await session.execute(
-                select(Invoice).where(Invoice.gstin == gstin, Invoice.fp == fp)
+                select(Invoice)
+                .options(selectinload(Invoice.lines))
+                .where(Invoice.gstin == gstin, Invoice.fp == fp)
             )
         ).scalars().all()
     )
@@ -58,7 +61,9 @@ async def export_gstr3b_json(
     rows = list(
         (
             await session.execute(
-                select(Invoice).where(Invoice.gstin == gstin, Invoice.fp == fp)
+                select(Invoice)
+                .options(selectinload(Invoice.lines))
+                .where(Invoice.gstin == gstin, Invoice.fp == fp)
             )
         ).scalars().all()
     )

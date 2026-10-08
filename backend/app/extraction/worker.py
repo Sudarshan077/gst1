@@ -110,14 +110,32 @@ async def _persist_result(
         }
 
     if result.document:
-        draft = InvoiceDraft(
-            extraction_job_id=job.id,
-            gstin=doc.gstin,
-            fp=doc.fp,
-            payload=result.document.model_dump(mode="json"),
-            field_confidence=result.document.confidence.model_dump(mode="json"),
-        )
-        session.add(draft)
+        # One draft per job: re-running an extraction (e.g. the dev-mode
+        # synchronous trigger after the UI already ran it) must refresh the
+        # existing draft, never insert a second row — a duplicate draft makes
+        # every subsequent read raise MultipleResultsFound (500).
+        existing_draft = (
+            await session.execute(
+                select(InvoiceDraft).where(InvoiceDraft.extraction_job_id == job.id)
+            )
+        ).scalars().first()
+        payload = result.document.model_dump(mode="json")
+        confidence = result.document.confidence.model_dump(mode="json")
+        if existing_draft is None:
+            session.add(
+                InvoiceDraft(
+                    extraction_job_id=job.id,
+                    gstin=doc.gstin,
+                    fp=doc.fp,
+                    payload=payload,
+                    field_confidence=confidence,
+                )
+            )
+        else:
+            existing_draft.gstin = doc.gstin
+            existing_draft.fp = doc.fp
+            existing_draft.payload = payload
+            existing_draft.field_confidence = confidence
 
     pr = result.preproc_report
     job.preproc_report = (job.preproc_report or {}) | {

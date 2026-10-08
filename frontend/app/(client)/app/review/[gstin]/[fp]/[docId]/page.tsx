@@ -111,7 +111,7 @@ export default function ReviewPage() {
 
   const fields = draft?.fields ?? {};
   const flags = draft?.flags ?? [];
-  const dirty = flags.length > 0;
+  const hasBlockingFlag = flags.some((f) => f.severity === "BLOCK");
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-8">
@@ -224,15 +224,15 @@ export default function ReviewPage() {
         <button
           type="button"
           onClick={confirm}
-          disabled={busy || dirty || draft === null}
+          disabled={busy || hasBlockingFlag || draft === null}
           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
           data-testid="confirm-document"
         >
           {busy ? "Confirming…" : "Confirm"}
         </button>
         <p className="text-sm text-slate-500">
-          {dirty
-            ? "Resolve validation flags before confirming."
+          {hasBlockingFlag
+            ? "Blocking validation errors must be resolved before confirming."
             : "All checks passed — confirm to add to the ledger."}
         </p>
       </div>

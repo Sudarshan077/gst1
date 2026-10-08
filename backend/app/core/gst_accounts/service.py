@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.errors import ServiceError
 from app.core.access import audit
@@ -445,7 +446,9 @@ async def month_summary(
 
     invoices = (
         await session.execute(
-            select(Invoice).where(Invoice.gstin == gstin, Invoice.fp == fp)
+            select(Invoice)
+            .options(selectinload(Invoice.lines))
+            .where(Invoice.gstin == gstin, Invoice.fp == fp)
         )
     ).scalars().all()
     totals = {

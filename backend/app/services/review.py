@@ -330,12 +330,13 @@ async def confirm_draft(
     await _ensure_open_period(session, doc.gstin, doc.fp)
     validation = await _run_validation(session, doc, draft)
 
-    if validation.flags:
+    blocking_flags = [f for f in validation.flags if f.severity == "BLOCK"]
+    if blocking_flags:
         messages = "; ".join(
-            f"{f.rule}({f.severity}): {f.message}" for f in validation.flags
+            f"{f.rule}({f.severity}): {f.message}" for f in blocking_flags
         )
         raise ServiceError(
-            f"draft has unresolved validation flags: {messages}",
+            f"draft has unresolved blocking flags: {messages}",
             422,
             "VALIDATION_DIRTY",
         )

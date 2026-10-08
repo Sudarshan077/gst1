@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Path, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,6 +53,7 @@ UserDep = Annotated[uuid.UUID, Depends(require_user)]
 
 _REVIEW_WRITE = "document review requires FILER or ADMIN on the GSTIN"
 _ALLOWED_DOC_TYPES = {"UNCLASSIFIED", "INV", "CDN", "DBN", "OTHER"}
+FP_REGEX = r"^(0[1-9]|1[0-2])(20\d{2})$"
 
 
 async def _doc_access(
@@ -194,7 +195,7 @@ async def reject_doc(
 @router.post("/gst-accounts/{gstin}/months/{fp}/documents")
 async def upload_documents(
     gstin: str,
-    fp: str,
+    fp: Annotated[str, Path(pattern=FP_REGEX, description="Filing period MMYYYY")],
     access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
     session: SessionDep,
     user_id: UserDep,

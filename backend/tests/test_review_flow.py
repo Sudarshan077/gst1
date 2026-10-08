@@ -353,10 +353,12 @@ async def test_confirm_duplicate_invoice_no_returns_409(
         api_sessionmaker, doc2, gstin, FP, _clean_fields(gstin, make_gstin(state_code="27"))
     )
     resp = await client.post(f"/api/v1/documents/{doc2}/confirm", headers=headers)
-    # the validator flags the duplicate before the service-level 409 belt
-    assert resp.status_code == 422
-    assert resp.json()["error"]["code"] == "VALIDATION_DIRTY"
-    assert "DUPLICATE_INVOICE" in resp.json()["error"]["message"]
+    # DUPLICATE_INVOICE is a non-blocking FLAG (EXTRACTION_SPEC §6), so the
+    # validator no longer short-circuits; the service's own duplicate belt
+    # rejects the second confirm with a specific 409.
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "DUPLICATE_INVOICE"
+    assert "duplicate invoice_no" in resp.json()["error"]["message"]
 
 
 async def test_confirm_on_locked_period_returns_423(

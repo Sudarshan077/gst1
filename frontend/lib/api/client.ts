@@ -322,13 +322,16 @@ export async function apiFetch<T>(
   const code = errBody?.error?.code ?? "NETWORK_ERROR";
   const message = errBody?.error?.message ?? `request failed (${res.status})`;
   const apiErr = new ApiError(code, message, res.status);
-  if (allowRefreshRetry && apiErr.status === 401 && accessToken !== null) {
-    try {
-      await refreshTokens();
+  if (allowRefreshRetry && apiErr.status === 401) {
+    // Route through the deduplicated silentRefresh(): concurrent 401s (React
+    // Strict Mode double-mount, parallel page fetches) must share ONE refresh
+    // call. Calling refreshTokens() directly here replays the already-rotated
+    // refresh cookie, which the backend treats as reuse and kills the family.
+    const refreshed = await silentRefresh();
+    if (refreshed) {
       return await apiFetch<T>(path, init, false);
-    } catch {
-      throw apiErr;
     }
+    throw apiErr;
   }
   throw apiErr;
 }

@@ -49,14 +49,18 @@ def seed_ocr_provider(image: Image.Image) -> str:
 
 
 def _build_seed_document(gstin: str, invoice_no: str, invoice_date: str) -> ExtractedDocument:
+    from app.core.gstin import make_gstin
+
     state_code = gstin[:2]
-    # Intra-state B2B sale from the registered GSTIN to a fixed valid buyer.
+    # Intra-state B2B sale from the registered GSTIN to a valid buyer in the
+    # same state — a checksum-valid GSTIN, never a hand-typed literal.
+    seed_buyer = make_gstin(state_code=state_code)
     return ExtractedDocument(
         doc_id=invoice_no,
         capture_source=CaptureSource.PDF_SCAN,
         fields=ExtractedFields(
             supplier_gstin=gstin,
-            buyer_gstin="29AABCU9603R1ZM",
+            buyer_gstin=seed_buyer,
             invoice_no=invoice_no,
             invoice_date=invoice_date,
             place_of_supply=state_code,
