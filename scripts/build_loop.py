@@ -33,6 +33,7 @@ Usage:
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -75,16 +76,21 @@ ROLE_CHAINS = {
         ("kimi-k2.7-code", "ollama-cloud"),
     ],
     "tester": [
-        ("glm-5.3-flash", "ollama-cloud"),
         ("minimax-m2.7", "ollama-cloud"),
+        ("glm-5.3-flash", "ollama-cloud"),
         ("kimi-k2.6", "ollama-cloud"),
     ],
-    # Monitor = deepseek-v4.1-flash on ollama-cloud. Kept INDEPENDENT of the
-    # Tester route so the pass/fail judgement does not come from the same
-    # upstream that produced the verification evidence.
+    # Monitor = deepseek-v4.1-flash, kept INDEPENDENT of the Tester route so the
+    # pass/fail judgement never comes from the same upstream that produced the
+    # verification evidence. The failover is glm-5.3 (the BUILDER's primary),
+    # deliberately NOT minimax-m2.7 — that is now the Tester's primary, and a
+    # Monitor falling back to it would grade its own evidence. deepseek stuck
+    # twice on 8 Oct (14 and 58 min dead), but the stuck detector now kills a
+    # dead run in ~6 min (3 consecutive flat windows) instead of ~58, so its
+    # dead-time cost is bounded and the independence principle is worth keeping.
     "monitor": [
         ("deepseek-v4.1-flash", "ollama-cloud"),
-        ("minimax-m2.7", "ollama-cloud"),
+        ("glm-5.3", "ollama-cloud"),
     ],
 }
 
@@ -336,6 +342,15 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
         # Require ALL signals flat to declare stuck (CPU + no TCP + no I/O delta + no mem delta).
         STUCK_MIN_IO_DELTA = 1024          # < 1KB I/O delta = no disk activity
         STUCK_MIN_MEM_DELTA = 256 * 1024   # < 256KB mem delta = no streaming/loading
+        # Number of CONSECUTIVE all-flat windows required before a kill. Requiring
+        # only one window let a transient lull (GC pause, a sample where a child
+        # had not yet spawned) look dead, and — worse — the window reset on any
+        # one noisy reading, so a genuinely dead socket could wait an hour before
+        # a window happened to stay flat. Three consecutive 120s windows (6 min)
+        # is long enough to be certain a socket is dead and short enough to stop
+        # paying ~58 min per dead agent. Measured: 144 of 218 min in one stretch
+        # (66% of wall-clock) went to two agents that had already died.
+        STUCK_WINDOWS_TO_KILL = 3
 
         # On Windows, psutil.children(recursive=True) can miss grandchildren that
         # spawned between checks, so tree_pids() may return a subset. As a safety
@@ -371,6 +386,7 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
         cpu_start = tree_cpu_safe()
         io_start = tree_io(proc.pid)
         mem_start = tree_mem(proc.pid)
+        flat_windows = 0
         while proc.poll() is None:
             now_t = time.time()
             if now_t >= deadline:
@@ -409,7 +425,12 @@ def run_agent(model, provider, prompt, max_turns=250, timeout=1800):
                     and 0 <= mem_delta < STUCK_MIN_MEM_DELTA
                 )
                 if all_flat:
+                    flat_windows += 1
+                else:
+                    flat_windows = 0
+                if flat_windows >= STUCK_WINDOWS_TO_KILL:
                     log(f"  ✗ {model} STUCK {now_t - t0:.0f}s in — "
+                        f"{flat_windows} consecutive flat windows, "
                         f"CPU={window_cpu:.1f}s, TCP={len(net_conns)}, "
                         f"IO_delta={io_delta}B, MEM_delta={mem_delta}B — "
                         f"killing tree")
@@ -928,7 +949,14 @@ def main():
         slot["tester_model_used"] = t_used["model"]
         slot["history"].append({"role": "tester", "out": t_out[-4000:],
                                 "ts": datetime.now().isoformat()})
-        passed = "VERDICT: PASS" in t_out
+        # Markdown-tolerant verdict parse. A strict `"VERDICT: PASS" in t_out`
+        # missed a correct report whose author wrote `**VERDICT: PASS**`
+        # (minimax-m2.7, task 8.5), which logged a FAIL for a green task and
+        # burned a retry. Strip markdown emphasis and collapse whitespace before
+        # matching so decoration cannot change the verdict.
+        _flat = re.sub(r"[*_`]", "", t_out)
+        _flat = re.sub(r"\s+", " ", _flat)
+        passed = "VERDICT: PASS" in _flat
         real_ev = has_real_evidence(t_out)
         slot["last_verdict"] = "PASS" if passed else "FAIL"
         slot["tester_evidence"] = "real" if real_ev else "weak"
