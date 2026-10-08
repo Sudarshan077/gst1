@@ -4,15 +4,39 @@ GST return filing platform for Indian businesses and CA firms — capture purcha
 
 **Stack:** Python 3.11 (FastAPI · SQLAlchemy · Alembic · PostgreSQL · Redis · MinIO) backend · Next.js 16 + TypeScript (App Router · Tailwind · shadcn/ui) frontend
 
-## Build status
+**Build status:** ✅ **Complete — 48 / 48 tasks done** across 8 phases.
 
-See **[docs/BUILD_TRACKER.md](docs/BUILD_TRACKER.md)** for live progress — phase summary, full task ledger, and what remains.
+---
+
+## 👉 New here (human or AI)? Start with the handoff guide
+
+**[docs/AI_HANDOFF.md](docs/AI_HANDOFF.md)** — boot the stack, seed demo data, run the app, and the full feature inventory. Everything below is indexed from there.
+
+---
+
+## Repository map
+
+| Folder | What lives here |
+|---|---|
+| `backend/app/` | FastAPI app — routers, services, DB models, extraction pipeline, auth |
+| `backend/tests/` | 36 test modules (210 tests) + shared helpers |
+| `backend/alembic/` | DB migrations |
+| `frontend/app/` | Next.js App Router screens — `(auth)` login, `(client)/app` shell |
+| `frontend/lib/` | Typed API client, session helpers |
+| `frontend/tests/` | Playwright E2E specs |
+| `scripts/` | `bootstrap_stack.py` (infra), `build_loop.py` (3-agent loop), `seed_demo.py`, `app_tour.cjs`, `generate_tracker.py`, `e2e_phase*.py` |
+| `docs/` | All specs, the build tracker, and the demo-screenshots output |
+| `test-samples/` | Ready-to-upload invoice fixtures (valid + failure cases) |
+
+---
 
 ## Documentation
 
 | Doc | Contents |
 |---|---|
-| [BUILD_TRACKER.md](docs/BUILD_TRACKER.md) | Progress tracker — what is done, what remains |
+| [AI_HANDOFF.md](docs/AI_HANDOFF.md) | **Start here** — boot, seed, run, feature inventory, caveats |
+| [TESTING_GUIDE.md](docs/TESTING_GUIDE.md) | Quality gates, test inventory, E2E + API-probe recipes, GST-domain checks |
+| [BUILD_TRACKER.md](docs/BUILD_TRACKER.md) | Live progress — phase summary, full task ledger |
 | [GST_BUILD_STATUS.md](docs/GST_BUILD_STATUS.md) | Detailed build status + hold record |
 | [PRD.md](docs/PRD.md) | Product requirements and user journeys |
 | [TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md) | Service layout, schemas, stack decisions |
@@ -21,30 +45,40 @@ See **[docs/BUILD_TRACKER.md](docs/BUILD_TRACKER.md)** for live progress — pha
 | [FRONTEND_SPECIFICATION.md](docs/FRONTEND_SPECIFICATION.md) | Screens, routes, design tokens |
 | [EXTRACTION_SPEC.md](docs/EXTRACTION_SPEC.md) | Document extraction pipeline |
 | [TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md) | Test layers and quality gates |
+| [VERIFICATION_SWEEP.md](docs/VERIFICATION_SWEEP.md) | 3-lens verification (code / frontend-user / GST-domain) |
 | [AI_BUILD_PLAYBOOK.md](docs/AI_BUILD_PLAYBOOK.md) | How the build loop operates |
 
-## Local development
+---
+
+## Quick start
 
 ```bash
 # 1. Infrastructure — PostgreSQL:5436, Redis:6380, MinIO:9001
-./backend/.venv/Scripts/python.exe scripts/bootstrap_stack.py
+backend/.venv/Scripts/python.exe scripts/bootstrap_stack.py --check   # expect 3x OK
 
-# 2. Backend
-cd backend
-./.venv/Scripts/python.exe -m uvicorn app.main:app --reload
+# 2. Backend (background terminal)
+cd backend && ./.venv/Scripts/python.exe -m uvicorn app.main:create_app --factory --port 8084 --host 127.0.0.1
 
 # 3. Frontend (port 9094)
-cd frontend
-npm run dev
+cd frontend && npm run dev -- --port 9094
+
+# 4. Seed a demo user + GSTINs
+backend/.venv/Scripts/python.exe scripts/seed_demo.py
+
+# 5. Guided tour with screenshots
+cd frontend && NODE_PATH="D:/gst_filing_app/frontend/node_modules" node ../scripts/app_tour.cjs
 ```
 
 ## Quality gates
 
-Every task must pass before it is counted as done:
+Every task passed before it counted as done:
 
 ```bash
-cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q   # tests
-cd backend && ./.venv/Scripts/python.exe -m ruff check .        # lint
+cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q   # tests (210 pass)
+cd backend && ./.venv/Scripts/python.exe -m ruff check .        # lint (clean)
 cd backend && ./.venv/Scripts/python.exe -m mypy .              # types
-cd frontend && npx tsc --noEmit && npm run lint                 # frontend
+cd frontend && npx tsc --noEmit && npm run lint                 # frontend (clean)
+cd frontend && npx playwright test tests/task7-2-upload-to-output.spec.ts   # E2E
 ```
+
+See [TESTING_GUIDE.md](docs/TESTING_GUIDE.md) for expected results and known coverage/mypy caveats.
