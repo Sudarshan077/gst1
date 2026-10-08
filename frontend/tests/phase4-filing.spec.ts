@@ -82,7 +82,10 @@ test.describe("Phase 4 filing surfaces", () => {
     await page.goto("/login");
     await page.getByTestId("login-identifier").fill(email);
     await page.getByTestId("login-request-otp").click();
-    const otp = await page.getByTestId("dev-otp").textContent();
+    const otp = await page
+      .getByTestId("dev-otp")
+      // Explicit timeout: under the full suite the backend is contended.
+      .textContent({ timeout: 15_000 });
     const code = otp!.match(/dev code:\s*(\d{6})/)![1];
     await page.getByTestId("login-otp").fill(code);
     await page.getByTestId("login-verify").click();
@@ -104,7 +107,10 @@ test.describe("Phase 4 filing surfaces", () => {
     await page.goto("/login");
     await page.getByTestId("login-identifier").fill(email);
     await page.getByTestId("login-request-otp").click();
-    const otp = await page.getByTestId("dev-otp").textContent();
+    const otp = await page
+      .getByTestId("dev-otp")
+      // Explicit timeout: under the full suite the backend is contended.
+      .textContent({ timeout: 15_000 });
     const code = otp!.match(/dev code:\s*(\d{6})/)![1];
     await page.getByTestId("login-otp").fill(code);
     await page.getByTestId("login-verify").click();

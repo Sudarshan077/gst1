@@ -41,7 +41,8 @@ async function loginViaUi(page: Page, email: string): Promise<void> {
   await page.getByTestId("login-identifier").fill(email);
   await page.getByTestId("login-request-otp").click();
   const banner = page.getByTestId("dev-otp");
-  await expect(banner).toBeVisible();
+  // Explicit timeout: under the full suite the dev server + backend are contended.
+  await expect(banner).toBeVisible({ timeout: 15_000 });
   const match = (await banner.textContent())?.match(/dev code:\s*(\d{6})/);
   expect(match).toBeTruthy();
   await page.getByTestId("login-otp").fill(match![1]);

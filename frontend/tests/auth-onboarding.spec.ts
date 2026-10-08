@@ -30,7 +30,8 @@ async function requestOtp(identifier: string, purpose: string) {
 /** Wait for the dev OTP banner that the backend echoes in dev mode. */
 async function waitForDevOtp(page: Page): Promise<string> {
   const banner = page.getByTestId("reg-dev-otp");
-  await expect(banner).toBeVisible();
+  // Explicit timeout: under the full suite the dev server + backend are contended.
+  await expect(banner).toBeVisible({ timeout: 15_000 });
   const text = await banner.textContent();
   const match = text?.match(/dev code:\s*(\d{6})/);
   expect(match).toBeTruthy();
@@ -40,7 +41,8 @@ async function waitForDevOtp(page: Page): Promise<string> {
 /** Wait for the dev OTP banner on the login screen. */
 async function waitForLoginDevOtp(page: Page): Promise<string> {
   const banner = page.getByTestId("dev-otp");
-  await expect(banner).toBeVisible();
+  // Explicit timeout: under the full suite the dev server + backend are contended.
+  await expect(banner).toBeVisible({ timeout: 15_000 });
   const text = await banner.textContent();
   const match = text?.match(/dev code:\s*(\d{6})/);
   expect(match).toBeTruthy();

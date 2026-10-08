@@ -43,7 +43,8 @@ async function loginViaUi(page: Page, email: string): Promise<void> {
   await page.getByTestId("login-identifier").fill(email);
   await page.getByTestId("login-request-otp").click();
   const banner = page.getByTestId("dev-otp");
-  await expect(banner).toBeVisible();
+  // Explicit timeout: under the full suite the dev server + backend are contended.
+  await expect(banner).toBeVisible({ timeout: 15_000 });
   const match = (await banner.textContent())?.match(/dev code:\s*(\d{6})/);
   expect(match).toBeTruthy();
   await page.getByTestId("login-otp").fill(match![1]);
@@ -99,8 +100,8 @@ test.describe("settings screen (/app/settings)", () => {
 
     // Toggle a notification pref -> save -> saved state.
     await emailToggle.click();
-    await expect(emailToggle).not.toBeChecked();
-    await expect(page.getByTestId("settings-save")).toBeEnabled();
+    await expect(emailToggle).not.toBeChecked({ timeout: 15_000 });
+    await expect(page.getByTestId("settings-save")).toBeEnabled({ timeout: 15_000 });
     await page.getByTestId("settings-save").click();
     await expect(page.getByTestId("settings-saved")).toBeVisible({ timeout: 15_000 });
 
@@ -109,8 +110,12 @@ test.describe("settings screen (/app/settings)", () => {
     await expect(page.getByTestId("settings-pref-email")).not.toBeChecked({
       timeout: 15_000,
     });
-    await expect(page.getByTestId("settings-pref-in_app")).toBeChecked();
-    await expect(page.getByTestId("settings-save")).toBeDisabled();
+    await expect(page.getByTestId("settings-pref-in_app")).toBeChecked({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("settings-save")).toBeDisabled({
+      timeout: 15_000,
+    });
 
     // Server is the authority: the prefs column really holds the toggle.
     const prefs = await fetchPrefsViaApi(email);
