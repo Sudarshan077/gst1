@@ -75,6 +75,7 @@ export default function ClientHomePage() {
         roleLabel="GST Filing"
         userName={me?.user.full_name ?? "…"}
         onSignOut={signOut}
+        gstAccounts={me?.gst_accounts ?? []}
       />
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
         <h1 className="text-2xl font-semibold">Your GST accounts</h1>

@@ -85,6 +85,7 @@ export default function CaHomePage() {
         roleLabel="GST Filing"
         userName={me?.user.full_name ?? "…"}
         onSignOut={signOut}
+        gstAccounts={me?.gst_accounts ?? []}
       />
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
         <div className="flex items-center justify-between">
