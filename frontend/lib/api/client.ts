@@ -406,6 +406,50 @@ export interface ProfilePatch {
   full_name: string;
 }
 
+/** GET/PATCH /me/settings aggregate (PHASE8 8.2). */
+export interface NotificationPrefs {
+  email: boolean;
+  in_app: boolean;
+}
+
+export interface SessionInfo {
+  active_sessions: number;
+  refresh_ttl_days: number;
+}
+
+export interface SettingsDto {
+  notification_preferences: Record<string, unknown> | null;
+  totp_enabled: boolean;
+  session: SessionInfo;
+}
+
+/** POST /auth/logout-all result (PHASE8 8.7 sign-out-everywhere). */
+export interface LogoutAllResult {
+  revoked_sessions: number;
+  active_sessions: number;
+}
+
+export async function fetchSettings(): Promise<SettingsDto> {
+  return apiFetch("/me/settings");
+}
+
+export async function updateSettings(
+  prefs: NotificationPrefs,
+): Promise<SettingsDto> {
+  // PATCH /me/settings delegates to the /me/notification-prefs handler
+  // (8.2 contract: no duplicated write logic); the response is the full
+  // settings aggregate, same as GET.
+  const payload: Record<string, boolean> = { ...prefs };
+  return apiFetch("/me/settings", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function signOutEverywhere(): Promise<LogoutAllResult> {
+  return apiFetch("/auth/logout-all", { method: "POST" });
+}
+
 export async function fetchProfile(): Promise<UserDto> {
   return apiFetch("/me/profile");
 }

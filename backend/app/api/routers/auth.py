@@ -121,6 +121,17 @@ async def totp_verify(
     return {"success": True, "data": await service.totp_verify(session, user_id, body.code)}
 
 
+@router.post("/logout-all")
+async def logout_all(
+    session: SessionDep, user_id: UserDep, response: Response
+) -> dict[str, object]:
+    """Sign-out-everywhere (PHASE8 8.7): revoke every refresh family the user
+    owns and clear this browser's refresh cookie. Idempotent."""
+    data = await service.logout_all(session, user_id)
+    response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH)
+    return {"success": True, "data": data}
+
+
 @router.get("/me", response_model=MeEnvelope)
 async def me(session: SessionDep, user_id: UserDep) -> dict[str, object]:
     return {"success": True, "data": await service.me(session, user_id)}

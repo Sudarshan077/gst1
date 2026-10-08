@@ -158,6 +158,27 @@ async def update_user_totp_secret(session: AsyncSession, user_id: uuid.UUID, sec
     await session.commit()
 
 
+async def logout_all(session: AsyncSession, user_id: uuid.UUID) -> dict[str, object]:
+    """POST /auth/logout-all — sign-out-everywhere (PHASE8 8.7).
+
+    Revokes every refresh family the user owns (all devices). The caller's
+    own refresh cookie dies with the families; the short-lived access JWT
+    simply ages out. One audit row records the count.
+    """
+    redis = get_redis()
+    revoked = await token_svc.revoke_all_families(redis, user_id)
+    await audit(
+        session,
+        action="SESSIONS_REVOKED_ALL",
+        entity="user",
+        entity_id=str(user_id),
+        actor_user_id=user_id,
+        payload_diff={"revoked_sessions": revoked},
+    )
+    await session.commit()
+    return {"revoked_sessions": revoked, "active_sessions": 0}
+
+
 async def me(session: AsyncSession, user_id: uuid.UUID) -> dict[str, object]:
     """GET /auth/me — profile + every GSTIN the user can operate on, with role.
 

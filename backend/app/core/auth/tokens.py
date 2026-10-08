@@ -185,3 +185,19 @@ async def revoke_refresh_token(redis: Redis, token: str) -> None:
     pipe.delete(_token_key(token))
     pipe.set(_tombstone_key(token), str(family_id), ex=REFRESH_TTL_SECONDS + 60)
     await pipe.execute()
+
+
+async def revoke_all_families(redis: Redis, user_id: uuid.UUID) -> int:
+    """Sign-out-everywhere (PHASE8 8.7): kill EVERY refresh family owned by
+    the user, retiring all live tokens. The short-lived access JWTs stay valid
+    until expiry (stateless by design, SECURITY §1); with no refresh family no
+    session can outlive that window. Returns the number of families killed —
+    the natural `revoked_sessions` figure for the response envelope."""
+    family_ids: list[str] = []
+    async for key in redis.scan_iter(match="rfam:*", count=500):
+        owner = await redis.get(key)
+        if owner == str(user_id):
+            family_ids.append(key.removeprefix("rfam:"))
+    for family_id in family_ids:
+        await _kill_family(redis, family_id)
+    return len(family_ids)
