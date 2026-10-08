@@ -33,6 +33,32 @@ async function registerApi(email: string) {
   return body.data;
 }
 
+/**
+ * Mod-36 checksum-valid synthetic GSTIN (same rule as lib/validation/gstin.ts).
+ * Task 8.11: previously a hardcoded vector; on the PERSISTENT dev DB a re-run
+ * hit 409 (owned by a previous run's user) and the hub rendered "no access to
+ * this GSTIN". A per-run generated GSTIN keeps the spec deterministic.
+ */
+function makeGstin(): string {
+  const state = "27";
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const digits = "0123456789";
+  const pan =
+    Array.from({ length: 5 }, () => letters[Math.floor(Math.random() * 26)]).join("") +
+    Array.from({ length: 4 }, () => digits[Math.floor(Math.random() * 10)]).join("") +
+    letters[Math.floor(Math.random() * 26)];
+  const first14 = `${state}${pan}1Z`;
+  const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const weights = [1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
+  let total = 0;
+  for (let i = 0; i < 14; i += 1) {
+    const prod = charset.indexOf(first14[i]) * weights[i];
+    total += Math.floor(prod / 36) + (prod % 36);
+  }
+  const check = charset[(36 - (total % 36)) % 36];
+  return `${first14}${check}`;
+}
+
 async function createGstAccount(token: string, gstin: string) {
   const res = await fetch(`${BACKEND}/api/v1/gst-accounts`, {
     method: "POST",
@@ -50,7 +76,7 @@ test.describe("Phase 4 filing surfaces", () => {
   test("GSP filing hub renders for a GSTIN + period", async ({ page }) => {
     const email = uniqueEmail();
     const { access_token } = await registerApi(email);
-    const gstin = "27AYCPY8898Z1ZB"; // checksum-valid synthetic vector
+    const gstin = makeGstin(); // checksum-valid synthetic, per-run
     await createGstAccount(access_token, gstin);
 
     await page.goto("/login");
@@ -72,7 +98,7 @@ test.describe("Phase 4 filing surfaces", () => {
   test("IRN board renders for a GSTIN + period", async ({ page }) => {
     const email = uniqueEmail();
     const { access_token } = await registerApi(email);
-    const gstin = "27AYCPY8898Z1ZB"; // checksum-valid synthetic vector
+    const gstin = makeGstin(); // checksum-valid synthetic, per-run
     await createGstAccount(access_token, gstin);
 
     await page.goto("/login");
