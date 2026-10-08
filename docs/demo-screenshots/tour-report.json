@@ -1,0 +1,53 @@
+{
+  "email": "demo.tony@example.com",
+  "gstin": "27TNMUM0239F1Z8",
+  "fp": "092026",
+  "docId": "2ec51ae9-d12b-48f3-827b-3908f24948d0",
+  "steps": [
+    {
+      "n": 0,
+      "title": "API: create GSTIN for this tour",
+      "evidence": "POST /gst-accounts 27TNMUM0239F1Z8 -> 200"
+    },
+    {
+      "n": 1,
+      "title": "Login screen (email-only OTP)",
+      "evidence": "GET /login 200; dev OTP echoed; screen → D:\\gst_filing_app\\docs\\demo-screenshots\\01-login-screen.png"
+    },
+    {
+      "n": 2,
+      "title": "Unified shell — GSTIN dashboard",
+      "evidence": "5 GST account card(s) rendered; screen → D:\\gst_filing_app\\docs\\demo-screenshots\\02-shell-dashboard.png"
+    },
+    {
+      "n": 3,
+      "title": "Upload screen (capture source + file drop)",
+      "evidence": "URL /app/upload/27AAPFU0939F1ZV/092026; screen → D:\\gst_filing_app\\docs\\demo-screenshots\\03-upload-screen.png"
+    },
+    {
+      "n": 4,
+      "title": "Upload → extraction",
+      "evidence": "doc 2ec51ae9-d12b-48f3-827b-3908f24948d0; status text present; screen → D:\\gst_filing_app\\docs\\demo-screenshots\\04-upload-success.png"
+    },
+    {
+      "n": 5,
+      "title": "Review & confirm",
+      "evidence": "Confirm enabled=true; flags banner=0; screen → D:\\gst_filing_app\\docs\\demo-screenshots\\05-review-screen.png"
+    },
+    {
+      "n": 6,
+      "title": "Confirm → invoice written to ledger",
+      "evidence": "review-success visible; screen → D:\\gst_filing_app\\docs\\demo-screenshots\\06-confirm-success.png"
+    },
+    {
+      "n": 7,
+      "title": "Returns output — GSTR-1 + GSTR-3B download",
+      "evidence": "GSTR1=GSTR1-27TNMUM0239F1Z8-092026.json; GSTR3B=GSTR3B-27TNMUM0239F1Z8-092026.json; screen → D:\\gst_filing_app\\docs\\demo-screenshots\\07-returns-output.png"
+    },
+    {
+      "n": 8,
+      "title": "Backend capabilities (API probes)",
+      "evidence": "GET /gst-accounts/27TNMUM0239F1Z8/months/092026/summary -> 200 | GET /gst-accounts/27TNMUM0239F1Z8/months/092026/gstr1/export.json -> 200 | GET /gst-accounts/27TNMUM0239F1Z8/months/092026/gstr3b/export.json -> 200 | GET /gst-accounts/27TNMUM0239F1Z8/months/092026/review-queue -> 200 | GET /gst-accounts -> 200 | GET /auth/me -> 200"
+    }
+  ]
+}
