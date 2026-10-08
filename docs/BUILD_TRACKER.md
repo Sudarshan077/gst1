@@ -3,8 +3,8 @@
 **Repo:** `github.com/Sudarshan077/gst1` · **Branch:** `main`  
 **Stack:** Python 3.11 (FastAPI · SQLAlchemy · Alembic · PostgreSQL) backend · Next.js 16 + TypeScript (App Router · Tailwind · shadcn/ui) frontend  
 **Build mode:** 3-agent loop — Builder / Tester / Monitor. Every task is independently verified by the Tester (real command output: pytest, ruff, mypy, tsc, Playwright) before the Monitor may ADVANCE it. Backend and frontend are built together in the same loop.  
-**Last updated:** 2026-10-08 13:53 IST  
-**Progress:** **48 / 59 tasks done (81%)**
+**Last updated:** 2026-10-08 15:17 IST  
+**Progress:** **50 / 59 tasks done (84%)**
 
 ---
 
@@ -20,8 +20,8 @@
 | 5 | Deployment, Compliance & Go-Live (Free/OSS-only) | 5 | 5 | 0 | ✅ Complete |
 | 6 | Verification Sweep (re-test every prior phase with elite models; Tony, 6 Oct) | 6 | 6 | 0 | ✅ Complete |
 | 7 | UX/Core Flow Redesign (email-only auth, single user, upload-to-output) — Tony, 6 Oct | 3 | 3 | 0 | ✅ Complete |
-| 8 | Product Completeness: Profile, Settings, Business Management & Filing-Ready Returns — Tony, 8 Oct | 11 | 0 | 11 | 🔄 In progress |
-| **Total** | | **59** | **48** | **11** | |
+| 8 | Product Completeness: Profile, Settings, Business Management & Filing-Ready Returns — Tony, 8 Oct | 11 | 2 | 9 | 🔄 In progress |
+| **Total** | | **59** | **50** | **9** | |
 
 ---
 
@@ -119,8 +119,8 @@
 
 | ID | Task | Status | Source docs |
 |---|---|---|---|
-| 8.1 | Backend: User Profile API (GET/PATCH /me/profile, email read-only, audit) | 🔄 In progress | `PHASE8_PRODUCT_COMPLETENESS.md`, `API_SPECIFICATION.md`, `SECURITY_AND_ACCESS.md` |
-| 8.2 | Backend: Settings API (GET /me/settings aggregate, PATCH delegates to prefs) | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `API_SPECIFICATION.md` |
+| 8.1 | Backend: User Profile API (GET/PATCH /me/profile, email read-only, audit) | ✅ Done | `PHASE8_PRODUCT_COMPLETENESS.md`, `API_SPECIFICATION.md`, `SECURITY_AND_ACCESS.md` |
+| 8.2 | Backend: Settings API (GET /me/settings aggregate, PATCH delegates to prefs) | ✅ Done | `PHASE8_PRODUCT_COMPLETENESS.md`, `API_SPECIFICATION.md` |
 | 8.3 | Backend: Business (GSTIN) management — editable fields + GET /gst-accounts/{gstin}/overview | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `TECHNICAL_ARCHITECTURE.md` |
 | 8.4 | Backend: Returns generate pipeline + real .xlsx export + HSN summary + pre-file validation | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `EXTRACTION_SPEC.md` |
 | 8.5 | Frontend: persistent app shell nav (Dashboard/Businesses/Upload/Returns/Profile/Settings + GSTIN switcher) | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
