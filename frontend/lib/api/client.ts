@@ -31,7 +31,7 @@ export class ApiError extends Error {
   }
 }
 
-interface UserDto {
+export interface UserDto {
   id: string;
   email: string;
   full_name: string;
@@ -399,6 +399,22 @@ export async function verifyOtp(
 
 export async function fetchMe(): Promise<MeDto> {
   return apiFetch("/auth/me");
+}
+
+/** PATCH /me/profile body — full_name ONLY (PHASE8 8.1, email is read-only). */
+export interface ProfilePatch {
+  full_name: string;
+}
+
+export async function fetchProfile(): Promise<UserDto> {
+  return apiFetch("/me/profile");
+}
+
+export async function updateProfile(fullName: string): Promise<UserDto> {
+  return apiFetch("/me/profile", {
+    method: "PATCH",
+    body: JSON.stringify({ full_name: fullName } satisfies ProfilePatch),
+  });
 }
 
 export async function totpSetup(): Promise<TotpSetupResult> {
