@@ -5,6 +5,8 @@ Routes:
   GET    /gst-accounts
   GET    /gst-accounts/{gstin}
   PATCH  /gst-accounts/{gstin}
+  GET    /gst-accounts/{gstin}/overview
+  GET    /gst-accounts/{gstin}/months/{fp}/summary
   GET    /gst-accounts/{gstin}/audit
   POST   /gst-accounts/{gstin}/collaborators
   GET    /gst-accounts/{gstin}/collaborators
@@ -124,6 +126,17 @@ async def get_gst_account_overview(
             "periods": periods,
         },
     }
+
+
+@router.get("/{gstin}/months/{fp}/summary")
+async def get_month_summary(
+    gstin: str,
+    fp: str,
+    access: GstinDep,
+    session: SessionDep,
+) -> dict[str, Any]:
+    data = await service.month_summary(session, access.gstin, fp)
+    return {"success": True, "data": data}
 
 
 @router.get("/{gstin}/audit")
