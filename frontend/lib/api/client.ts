@@ -391,6 +391,125 @@ export async function listEinvoices(
   return apiFetch(`/gst-accounts/${gstin}/months/${fp}/einvoices`);
 }
 
+/* ------------------------------------------------------------------ *
+ * Task 9.4 — ITC reconciliation dashboard (PHASE9_QA_SWEEP_FIXES §3.9.4).
+ * Backend: `app/services/returns/gstr2b.py:build_itc_report`. Money is
+ * integer paise on BOTH sides; rupee conversion happens only at render.
+ */
+
+/** The 5 reconciliation verdicts (backend MatchStatus enum, never invented). */
+export const ITC_MATCH_STATUSES = [
+  "MATCHED",
+  "PROBABLE",
+  "UNMATCHED",
+  "MISSING_IN_2B",
+  "MISSING_IN_BOOKS",
+] as const;
+
+export type ItcMatchStatus = (typeof ITC_MATCH_STATUSES)[number];
+
+/** Paise tax bucket shared by both sides of the reconciliation. */
+export interface ItcTaxBucket {
+  cgst_paise: number;
+  sgst_paise: number;
+  igst_paise: number;
+  cess_paise: number;
+  total_paise: number;
+}
+
+/** Books side of a reconciliation row (from the confirmed purchase invoice). */
+export interface ItcBooksSide extends ItcTaxBucket {
+  invoice_id: string;
+  invoice_no: string;
+  invoice_date: string;
+  supplier_gstin: string | null;
+  buyer_gstin: string | null;
+  place_of_supply: string;
+  status: string;
+  taxable_value_paise: number;
+  total_value_paise: number;
+}
+
+/** 2B side of a reconciliation row (from the imported statement entry). */
+export interface ItcGstr2bSide extends ItcTaxBucket {
+  entry_id: string;
+  invoice_no: string;
+  invoice_date: string;
+  supplier_gstin: string;
+  doc_type: string;
+  itc_eligible: boolean;
+  taxable_value_paise: number;
+}
+
+export interface ItcReportRow {
+  id: string;
+  match_status: ItcMatchStatus;
+  confidence: number | null;
+  remarks: string | null;
+  books: ItcBooksSide | null;
+  gstr2b: ItcGstr2bSide | null;
+}
+
+export interface ItcReportStatement {
+  id: string;
+  source: string;
+  downloaded_at: string;
+  entry_count: number;
+}
+
+export interface ItcReport {
+  gstin: string;
+  fp: string;
+  statement: ItcReportStatement | null;
+  rows: ItcReportRow[];
+  summary: {
+    /** Per-status counts across ALL rows, plus `total`. */
+    counts: Record<string, number>;
+    books_itc_paise: ItcTaxBucket;
+    gstr2b_itc_paise: ItcTaxBucket;
+    delta_itc_paise: ItcTaxBucket;
+  };
+}
+
+export async function getItcReport(
+  gstin: string,
+  fp: string,
+  status?: ItcMatchStatus,
+): Promise<ItcReport> {
+  const query = status === undefined ? "" : `?status=${status}`;
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/itc/report${query}`);
+}
+
+export interface Gstr2bImportResult {
+  id: string;
+  gstin: string;
+  fp: string;
+  source: string;
+  downloaded_at: string;
+}
+
+/** Portal 2B JSON upload → statement + parsed entries. */
+export async function importGstr2b(
+  gstin: string,
+  fp: string,
+  payload: Record<string, unknown>,
+): Promise<Gstr2bImportResult> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/gstr2b/import`, {
+    method: "POST",
+    body: JSON.stringify({ payload }),
+  });
+}
+
+/** Runs the matching engine → the 5-status reconciliation rows. */
+export async function reconcileItc(
+  gstin: string,
+  fp: string,
+): Promise<{ id: string; match_status: string }[]> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/itc/reconcile`, {
+    method: "POST",
+  });
+}
+
 let accessToken: string | null = null;
 let refreshPromise: Promise<boolean> | null = null;
 

@@ -5,6 +5,7 @@ import uuid
 from datetime import date
 from typing import Any
 
+from app.api.errors import ServiceError
 from app.db.models.gst import (
     Gstr2bEntry,
     Gstr2bSource,
@@ -16,6 +17,7 @@ from app.db.models.gst import (
 )
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 
 async def import_gstr2b(
@@ -200,3 +202,227 @@ async def reconcile_itc(
     session.add_all(reconciliations)
     await session.commit()
     return reconciliations
+
+
+# --------------------------------------------------------------- report (9.4)
+
+_ZERO_TAX: dict[str, int] = {"cgst": 0, "sgst": 0, "igst": 0, "cess": 0}
+
+
+def _tax_bucket(
+    cgst: int, sgst: int, igst: int, cess: int
+) -> dict[str, int]:
+    """Integer-paise tax bucket with an explicit total (never a float)."""
+    return {
+        "cgst_paise": cgst,
+        "sgst_paise": sgst,
+        "igst_paise": igst,
+        "cess_paise": cess,
+        "total_paise": cgst + sgst + igst + cess,
+    }
+
+
+def _books_side(invoice: Invoice) -> dict[str, Any]:
+    """Books row: invoice-level money + the line-item tax breakdown."""
+    taxable = 0
+    cgst = 0
+    sgst = 0
+    igst = 0
+    cess = 0
+    for line in invoice.lines:
+        taxable += line.taxable_value_minor
+        cgst += line.cgst_minor
+        sgst += line.sgst_minor
+        igst += line.igst_minor
+        cess += line.cess_minor
+    total = invoice.total_value_minor
+    return {
+        "invoice_id": str(invoice.id),
+        "invoice_no": invoice.invoice_no,
+        "invoice_date": invoice.invoice_date.isoformat(),
+        "supplier_gstin": invoice.supplier_gstin,
+        "buyer_gstin": invoice.buyer_gstin,
+        "place_of_supply": invoice.place_of_supply,
+        "status": invoice.status.value,
+        "taxable_value_paise": taxable,
+        "total_value_paise": total,
+        **_tax_bucket(cgst, sgst, igst, cess),
+    }
+
+
+def _gstr2b_side(entry: Gstr2bEntry) -> dict[str, Any]:
+    """2B row: the statement's figures for the same document."""
+    return {
+        "entry_id": str(entry.id),
+        "invoice_no": entry.invoice_no,
+        "invoice_date": entry.invoice_date.isoformat(),
+        "supplier_gstin": entry.supplier_gstin,
+        "doc_type": entry.doc_type,
+        "itc_eligible": entry.itc_eligible,
+        "taxable_value_paise": entry.taxable_value_minor,
+        **_tax_bucket(
+            entry.cgst_minor, entry.sgst_minor, entry.igst_minor, entry.cess_minor
+        ),
+    }
+
+
+_TAX_KEYS: tuple[str, ...] = (
+    "cgst_paise",
+    "sgst_paise",
+    "igst_paise",
+    "cess_paise",
+    "total_paise",
+)
+
+
+def _sum_tax_buckets(buckets: list[dict[str, int]]) -> dict[str, int]:
+    total: dict[str, int] = {key: 0 for key in _TAX_KEYS}
+    for bucket in buckets:
+        for key in _TAX_KEYS:
+            total[key] += bucket[key]
+    return total
+
+
+async def build_itc_report(
+    session: AsyncSession,
+    gstin: str,
+    fp: str,
+    status: str | None = None,
+) -> dict[str, Any]:
+    """Books-vs-2B reconciliation report for one (gstin, fp).
+
+    API_SPECIFICATION.md §9 `GET /gst-accounts/{gstin}/months/{fp}/itc/report`
+    — the reconciliation rows enriched with BOTH sides' figures so the
+    dashboard can render the side-by-side table and the GSTR-3B ITC prefill
+    card. Money is integer paise on both sides.
+
+    `status` filters the returned `rows` only; `summary.counts` always counts
+    every status so the UI can label its filter chips.
+    """
+    statement = (
+        await session.execute(
+            select(Gstr2bStatement).where(
+                and_(Gstr2bStatement.gstin == gstin, Gstr2bStatement.fp == fp)
+            )
+        )
+    ).scalar_one_or_none()
+
+    recons = list(
+        (
+            await session.execute(
+                select(ItcReconciliation).where(
+                    ItcReconciliation.gstin == gstin,
+                    ItcReconciliation.fp == fp,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    invoice_ids = {r.purchase_invoice_id for r in recons if r.purchase_invoice_id}
+
+    entries: dict[uuid.UUID, Gstr2bEntry] = {}
+    entry_count = 0
+    if statement is not None:
+        statement_entries = (
+            await session.execute(
+                select(Gstr2bEntry).where(Gstr2bEntry.statement_id == statement.id)
+            )
+        ).scalars().all()
+        entries = {e.id: e for e in statement_entries}
+        entry_count = len(statement_entries)
+    else:
+        entry_ids = {r.gstr2b_entry_id for r in recons if r.gstr2b_entry_id}
+        if entry_ids:
+            rows_e = (
+                await session.execute(
+                    select(Gstr2bEntry).where(Gstr2bEntry.id.in_(entry_ids))
+                )
+            ).scalars().all()
+            entries = {e.id: e for e in rows_e}
+
+    invoices: dict[uuid.UUID, Invoice] = {}
+    if invoice_ids:
+        rows = (
+            await session.execute(
+                select(Invoice)
+                .options(selectinload(Invoice.lines))
+                .where(Invoice.id.in_(invoice_ids))
+            )
+        ).scalars().all()
+        invoices = {inv.id: inv for inv in rows}
+
+    counts: dict[str, int] = {s.value: 0 for s in MatchStatus}
+    report_rows: list[dict[str, Any]] = []
+    books_tax: list[dict[str, int]] = []
+    gstr2b_tax: list[dict[str, int]] = []
+
+    for recon in recons:
+        counts[recon.match_status.value] += 1
+        invoice = (
+            invoices.get(recon.purchase_invoice_id)
+            if recon.purchase_invoice_id is not None
+            else None
+        )
+        entry = (
+            entries.get(recon.gstr2b_entry_id)
+            if recon.gstr2b_entry_id is not None
+            else None
+        )
+        books = _books_side(invoice) if invoice is not None else None
+        two_b = _gstr2b_side(entry) if entry is not None else None
+        if books is not None:
+            books_tax.append({k: v for k, v in books.items() if k.endswith("_paise")})
+        if two_b is not None and two_b["itc_eligible"]:
+            gstr2b_tax.append({k: v for k, v in two_b.items() if k.endswith("_paise")})
+
+        report_rows.append(
+            {
+                "id": str(recon.id),
+                "match_status": recon.match_status.value,
+                "confidence": float(recon.confidence) if recon.confidence is not None else None,
+                "remarks": recon.remarks,
+                "books": books,
+                "gstr2b": two_b,
+            }
+        )
+
+    all_counts = dict(counts)
+    all_counts["total"] = len(recons)
+
+    filtered = report_rows
+    if status is not None:
+        valid = {s.value for s in MatchStatus}
+        if status not in valid:
+            raise ServiceError(
+                f"unknown match status: {status}", 422, "VALIDATION_ERROR"
+            )
+        filtered = [r for r in report_rows if r["match_status"] == status]
+
+    books_itc = _sum_tax_buckets(books_tax)
+    gstr2b_itc = _sum_tax_buckets(gstr2b_tax)
+
+    return {
+        "gstin": gstin,
+        "fp": fp,
+        "statement": (
+            {
+                "id": str(statement.id),
+                "source": statement.source.value,
+                "downloaded_at": statement.downloaded_at.isoformat(),
+                "entry_count": entry_count,
+            }
+            if statement is not None
+            else None
+        ),
+        "rows": filtered,
+        "summary": {
+            "counts": all_counts,
+            "books_itc_paise": books_itc,
+            "gstr2b_itc_paise": gstr2b_itc,
+            "delta_itc_paise": {
+                key: books_itc[key] - gstr2b_itc[key] for key in books_itc
+            },
+        },
+    }

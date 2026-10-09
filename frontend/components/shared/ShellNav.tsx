@@ -16,10 +16,10 @@ import type { GstinRefDto } from "@/lib/api/client";
 const DEFAULT_FP = "092026";
 
 /** GSTIN-scoped workspaces: /app/<section>/<gstin>[/<fp>[/<docId>]]. */
-const SCOPED_RE = /^\/app\/(?:upload|returns|file|einvoice|review)\/([^/]+)(?:\/([^/]+))?/;
+const SCOPED_RE = /^\/app\/(?:upload|returns|file|einvoice|review|itc)\/([^/]+)(?:\/([^/]+))?/;
 
 /** Sections the switcher may preserve when jumping to another GSTIN. */
-const SWITCHER_SECTIONS = ["upload", "returns", "file", "einvoice"];
+const SWITCHER_SECTIONS = ["upload", "returns", "file", "einvoice", "itc"];
 
 function gstinFromPath(pathname: string): string | null {
   const m = SCOPED_RE.exec(pathname);
@@ -86,6 +86,14 @@ export function ShellNav({
       label: "Returns",
       href: activeGstin !== null ? `/app/returns/${activeGstin}/${fp}` : "/app",
       isActive: (p) => p.startsWith("/app/returns"),
+    },
+    {
+      key: "itc",
+      label: "ITC",
+      // Task 9.4: the reconciliation dashboard, GSTIN + period scoped like the
+      // other workspaces; falls back to the shell until a GSTIN exists.
+      href: activeGstin !== null ? `/app/itc/${activeGstin}/${fp}` : "/app",
+      isActive: (p) => p.startsWith("/app/itc"),
     },
     {
       key: "profile",
