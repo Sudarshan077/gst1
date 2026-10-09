@@ -70,8 +70,10 @@ ROLES_PATH = os.path.join(BUILD_DIR, "role_models.json")
 # upstream). Do not re-introduce OmniRoute here — an out-of-band edit that does
 # is a regression, not a failover improvement.
 ROLE_CHAINS = {
+    # Builder/Monitor chains SWAPPED at Tony's request, 9 Oct — deepseek-v4.1-flash
+    # now builds, glm-5.3 monitors. Tails swapped consistently. Revert = swap back.
     "builder": [
-        ("glm-5.3", "ollama-cloud"),
+        ("deepseek-v4.1-flash", "ollama-cloud"),
         ("kimi-k3", "ollama-cloud"),
         ("kimi-k2.7-code", "ollama-cloud"),
     ],
@@ -80,17 +82,12 @@ ROLE_CHAINS = {
         ("glm-5.3-flash", "ollama-cloud"),
         ("kimi-k2.6", "ollama-cloud"),
     ],
-    # Monitor = deepseek-v4.1-flash, kept INDEPENDENT of the Tester route so the
-    # pass/fail judgement never comes from the same upstream that produced the
-    # verification evidence. The failover is glm-5.3 (the BUILDER's primary),
-    # deliberately NOT minimax-m2.7 — that is now the Tester's primary, and a
-    # Monitor falling back to it would grade its own evidence. deepseek stuck
-    # twice on 8 Oct (14 and 58 min dead), but the stuck detector now kills a
-    # dead run in ~6 min (3 consecutive flat windows) instead of ~58, so its
-    # dead-time cost is bounded and the independence principle is worth keeping.
+    # Monitor = glm-5.3 (swapped with Builder, Tony 9 Oct). Still independent of
+    # the Tester's primary route (minimax-m2.7), so the pass/fail judgement never
+    # comes from the same upstream that produced the verification evidence.
     "monitor": [
-        ("deepseek-v4.1-flash", "ollama-cloud"),
         ("glm-5.3", "ollama-cloud"),
+        ("deepseek-v4.1-flash", "ollama-cloud"),
     ],
 }
 
