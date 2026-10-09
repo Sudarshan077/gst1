@@ -4,7 +4,7 @@ GST return filing platform for Indian businesses and CA firms — capture purcha
 
 **Stack:** Python 3.11 (FastAPI · SQLAlchemy · Alembic · PostgreSQL · Redis · MinIO) backend · Next.js 16 + TypeScript (App Router · Tailwind · shadcn/ui) frontend
 
-**Build status:** ✅ **Complete — 48 / 48 tasks done** across 8 phases.
+**Build status:** ✅ **Complete — 59 / 59 tasks done** across 9 phases (0–8).
 
 ---
 
@@ -19,7 +19,7 @@ GST return filing platform for Indian businesses and CA firms — capture purcha
 | Folder | What lives here |
 |---|---|
 | `backend/app/` | FastAPI app — routers, services, DB models, extraction pipeline, auth |
-| `backend/tests/` | 36 test modules (210 tests) + shared helpers |
+| `backend/tests/` | 41 test modules (243 tests) + shared helpers |
 | `backend/alembic/` | DB migrations |
 | `frontend/app/` | Next.js App Router screens — `(auth)` login, `(client)/app` shell |
 | `frontend/lib/` | Typed API client, session helpers |
@@ -39,6 +39,7 @@ GST return filing platform for Indian businesses and CA firms — capture purcha
 | [BUILD_TRACKER.md](docs/BUILD_TRACKER.md) | Live progress — phase summary, full task ledger |
 | [GST_BUILD_STATUS.md](docs/GST_BUILD_STATUS.md) | Detailed build status + hold record |
 | [PRD.md](docs/PRD.md) | Product requirements and user journeys |
+| [PHASE8_PRODUCT_COMPLETENESS.md](docs/PHASE8_PRODUCT_COMPLETENESS.md) | Phase-8 scope: gap analysis, task contracts, verification protocol |
 | [TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md) | Service layout, schemas, stack decisions |
 | [API_SPECIFICATION.md](docs/API_SPECIFICATION.md) | Endpoint contracts |
 | [SECURITY_AND_ACCESS.md](docs/SECURITY_AND_ACCESS.md) | Auth model, tenancy isolation, audit rules |
@@ -74,11 +75,12 @@ cd frontend && NODE_PATH="D:/gst_filing_app/frontend/node_modules" node ../scrip
 Every task passed before it counted as done:
 
 ```bash
-cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q   # tests (210 pass)
+cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q   # tests (243 pass, 80% cov)
 cd backend && ./.venv/Scripts/python.exe -m ruff check .        # lint (clean)
-cd backend && ./.venv/Scripts/python.exe -m mypy .              # types
+cd backend && ./.venv/Scripts/python.exe -m mypy .              # types (clean)
 cd frontend && npx tsc --noEmit && npm run lint                 # frontend (clean)
-cd frontend && npx playwright test tests/task7-2-upload-to-output.spec.ts   # E2E
+cd frontend && npx playwright test                              # E2E (18 specs)
+cd /d/gst_filing_app && python scripts/e2e_phase8.py            # 3-lens final gate
 ```
 
 See [TESTING_GUIDE.md](docs/TESTING_GUIDE.md) for expected results and known coverage/mypy caveats.

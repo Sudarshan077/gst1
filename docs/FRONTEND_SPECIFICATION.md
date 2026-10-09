@@ -12,27 +12,28 @@
 frontend/
 ├── app/
 │   ├── (auth)/
-│   │   ├── login/page.tsx            # email OTP / password login
-│   │   └── register/page.tsx         # email signup
-│   ├── (dashboard)/
-│   │   ├── /                         # home: GSTIN switcher + per-GSTIN month cards + deadlines
-│   │   ├── gst-accounts/             # GSTIN management (add GSTIN, collaborators)
-│   │   ├── [gstin]/months/[fp]/      # month workspace (upload + ledger + review)
-│   │   ├── [gstin]/returns/[fp]/     # GSTR-1/3B return prep, export history, amendments
-│   │   ├── [gstin]/itc/[fp]/         # 2B import + reconciliation report
-│   │   ├── review/[docId]/           # side-by-side extraction review
-│   │   └── settings/                 # user profile, DPDP export/erasure
+│   │   ├── login/page.tsx                 # email-only OTP login (no mobile field)
+│   │   ├── register/page.tsx              # email signup
+│   │   └── totp/page.tsx                  # TOTP enrollment (QR + verify)
+│   ├── (client)/app/                      # unified single-user shell (PHASE8 8.5)
+│   │   ├── page.tsx                       # dashboard: GSTIN cards + filing-status grid
+│   │   ├── profile/                       # own profile (name editable, email read-only) — PHASE8 8.6
+│   │   ├── settings/                      # notification prefs, TOTP entry, sessions — PHASE8 8.7
+│   │   ├── businesses/                    # list + add GSTIN — PHASE8 8.8
+│   │   ├── businesses/[gstin]/            # detail + edit business fields — PHASE8 8.8
+│   │   ├── upload/[gstin]/[fp]/           # month workspace (upload + ledger)
+│   │   ├── review/[gstin]/[fp]/[docId]/   # side-by-side extraction review
+│   │   ├── returns/[gstin]/[fp]/          # returns workspace (generate→format→validate→file) — PHASE8 8.9
+│   │   ├── file/[gstin]/[fp]/             # GSP filing hub (additive, restored)
+│   │   └── einvoice/[gstin]/[fp]/         # IRN board
+│   ├── (ca)/ca/                           # CA roster view (additive, kept)
+│   ├── layout.tsx
+│   └── page.tsx                           # landing (redirects per auth state)
 ├── components/
-│   ├── ui/                           # shadcn/ui primitives
-│   ├── upload/                       # dropzone, photo-burst grouper, job status chips
-│   ├── review/                       # ExtractedField, ConfidenceBadge, DocImagePane
-│   ├── returns/                      # SectionTabs (B2B/B2CS/CDNR/...), ExportHistory
-│   └── shared/                       # GstinSelector, DeadlineCountdown, StatusChip, GstinInput
-├── lib/
-│   ├── api/                          # typed client (generated from Pydantic schema)
-│   ├── format/                       # paise→₹, Indian numbering, dates, fp labels
-│   └── validation/                   # GSTIN checksum (mirror), PAN regex
-└── middleware.ts                     # JWT auth check + session guard
+│   ├── shared/ShellNav.tsx                # persistent nav: Dashboard·Businesses·Upload·Returns·Profile·Settings + GSTIN switcher
+│   └── ui/                                # shadcn/ui primitives
+├── lib/                                   # typed API client, session helpers
+└── middleware.ts                          # auth guard (routing only — server is the authority)
 ```
 
 ## 2. Design tokens
@@ -91,6 +92,51 @@ Typography: Inter; tables dense (13px), dashboards 14px. Dark mode: shadcn defau
 
 2B upload → import progress → reconciliation table (5 status filters: MATCHED/PROBABLE/UNMATCHED/MISSING_IN_2B/MISSING_IN_BOOKS) → ITC summary prefill for 3B → "chase supplier" action list.
 
+### 3.6 Profile `/app/profile` (PHASE8 8.6)
+
+| Element | Behavior |
+|---|---|
+| Name | inline edit `full_name` → save → persists after reload |
+| Email | shown read-only — no edit surface (server rejects `{email}` with 422) |
+| States | save/error toasts; no password or mobile surface |
+
+### 3.7 Settings `/app/settings` (PHASE8 8.7)
+
+| Element | Behavior |
+|---|---|
+| Notification prefs | per-event channel toggles → save → persists after reload (via `PATCH /me/settings` → notification-prefs delegation) |
+| Security | TOTP entry links to the enrollment flow and reflects enabled state |
+| Session | active-session count; sign-out-everywhere revokes other devices' sessions |
+
+### 3.8 Manage businesses `/app/businesses`, `/app/businesses/[gstin]` (PHASE8 8.8)
+
+| Element | Behavior |
+|---|---|
+| List | all accessible GSTINs with role + scheme |
+| Add GSTIN | client-side mod-36 checksum validation before submit (server re-validates); `filing_scheme` picker |
+| Detail | editable `legal_name`, `trade_name`, `registered_address`, `filing_scheme`; this-FY per-period statuses via `GET …/overview` |
+
+### 3.9 Returns workspace `/app/returns/[gstin]/[fp]` (PHASE8 8.9)
+
+| Step UI | Behavior |
+|---|---|
+| Generate | one button → `POST …/returns/generate` (idempotent, prepares + generates GSTR-1 **and** 3B) → per-return status |
+| Format picker | JSON **or** Excel (.xlsx, server-rendered) — existing `download-gstr1` / `download-gstr3b` testids preserved (7.2 spec depends on them) |
+| HSN table | per-HSN summary; totals reconcile to GSTR-1 |
+| Validation checklist | pre-file blocker/warning list from `GET …/returns/validation`; blocking entries must clear before file |
+| Additive | prior JSON download buttons and history remain |
+
+### 3.10 Dashboard filing-status tracker `/app` (PHASE8 8.10)
+
+| Element | Behavior |
+|---|---|
+| Status grid | per-GSTIN × period roll-up: filed / draft / pending + quick actions |
+| Additive | existing `gst-account-card` + `upload-link` testids and layout stay intact |
+
+### 3.11 App shell nav (PHASE8 8.5)
+
+Persistent `ShellNav.tsx`: **Dashboard · Businesses · Upload · Returns · Profile · Settings** + GSTIN switcher, active-route highlight. Every screen is reachable **by clicking the nav** from `/app` — enforced by `phase8-product-shell.spec.ts`.
+
 ## 4. Frontend rules (AI-builder constraints)
 
 | Rule | Detail |
@@ -115,3 +161,9 @@ Typography: Inter; tables dense (13px), dashboards 14px. Dark mode: shadcn defau
 | Return prep | Guard blocks; JSON download only after validator passes; history immutable |
 | ITC | 2B import → 5-status report → 3B prefill |
 | DPDP | Self-service export downloads; erasure request flow completes |
+| Profile (PHASE8) | edit name → save → persists; email read-only (Playwright-verified) |
+| Settings (PHASE8) | toggle pref → save → persists; sign-out-everywhere revokes other session |
+| Businesses (PHASE8) | add checksum-valid GSTIN → list → detail → edit legal_name → persists; corrupted GSTIN rejected client-side |
+| Returns workspace (PHASE8) | generate → status → HSN table → validation checklist → Excel downloads |
+| Dashboard tracker (PHASE8) | status grid renders filed/draft/pending per period for a seeded GSTIN |
+| Shell nav (PHASE8) | every Phase-8 screen reachable by clicking nav from `/app` |

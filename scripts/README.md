@@ -9,7 +9,7 @@ Run everything from the **repo root** with the backend venv unless noted.
 | `app_tour.cjs` | Drive the real UI (login→upload→review→confirm→returns), write screenshots + `tour-report.json` | `cd frontend && NODE_PATH="$PWD/node_modules" node ../scripts/app_tour.cjs` |
 | `generate_tracker.py` | Regenerate `docs/BUILD_TRACKER.md` from `build/plan.json` + `build/state.json` | `python scripts/generate_tracker.py` |
 | `build_loop.py` | The 3-agent build loop (Builder/Tester/Monitor). Build is **complete** — do not relaunch unless re-testing | `python scripts/build_loop.py` |
-| `e2e_phase0..5.py` | Per-phase E2E harnesses (phases 0–5) | `uv run --project backend python scripts/e2e_phase3.py` |
+| `e2e_phase0..8.py` | Per-phase E2E harnesses (phases 0–8). `e2e_phase8.py` is the final 3-lens gate (Code / Frontend / GST-domain) — expects backend :8084 up | `python scripts/e2e_phase8.py` |
 | `measure_extraction.py` | Extraction accuracy harness against the golden set | `backend/.venv/Scripts/python.exe scripts/measure_extraction.py` |
 | `generate_golden_set.py` / `generate_predictions.py` | Golden-set tooling | see file docstrings |
 | `backup_production.py` | Self-hosted backup routine | see file docstring |

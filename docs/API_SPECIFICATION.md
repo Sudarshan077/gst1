@@ -39,10 +39,13 @@
 |---|---|---|
 | GET | `/me/profile` | (JWT) own profile; same user shape as `/auth/me`'s `data.user`; email read-only (PHASE8 8.1) |
 | PATCH | `/me/profile` | (JWT) `{full_name}` only — any other field (incl. `email`) → 422, never silent; audit `PROFILE_UPDATED` |
+| GET | `/me/settings` | (JWT) consolidated settings aggregate: `notification_preferences`, `totp_enabled` (bool), `session.active_sessions` (live Redis refresh-family count) + `session.refresh_ttl_days` (PHASE8 8.2) |
+| PATCH | `/me/settings` | (JWT) **delegates to the `/me/notification-prefs` handler** — body IS the notification-prefs payload; no duplicated write logic; response = what GET returns |
 | POST | `/gst-accounts` | `{gstin, legal_name, trade_name?, registered_address?, aato_minor?}` — full GSTIN validation (mod-36 + PAN extraction from chars 3-12); sets `filing_scheme`, `irn_applicable`; creator becomes ADMIN |
 | GET | `/gst-accounts` | my GSTINs (via user_gst_access) with role |
 | GET | `/gst-accounts/{gstin}` | detail incl. scheme/irn flags |
-| PATCH | `/gst-accounts/{gstin}` | update trade_name, address, aato, scheme |
+| PATCH | `/gst-accounts/{gstin}` | (FILER/ADMIN) edit `legal_name`, `trade_name`, `registered_address`, `aato_minor`, `filing_scheme`; audit on every write (PHASE8 8.3) |
+| GET | `/gst-accounts/{gstin}/overview` | account detail + this-FY filing status per period (`gstin`, `fy`, `detail`, `periods[]`) (PHASE8 8.3) |
 | GET | `/gst-accounts/{gstin}/periods?fy=` | filing_periods with due dates + status |
 | GET | `/gst-accounts/{gstin}/months/{fp}/summary` | month card data: doc counts, ledger totals, deadline, nil flag |
 | POST | `/gst-accounts/{gstin}/collaborators` | `{email, role: ADMIN/FILER/VIEWER}` — invite another user to this GSTIN |
@@ -85,6 +88,13 @@
 |---|---|---|
 | POST | `/gst-accounts/{gstin}/months/{fp}/gstr1/prepare` | guard: 0 pending reviews; dual-path by irn_applicable; returns section summary + validation errors |
 | POST | `/gst-accounts/{gstin}/months/{fp}/gstr1/generate` | step-up; writes export record + MinIO JSON; 422 if validator errors |
+| POST | `/gst-accounts/{gstin}/months/{fp}/returns/generate` | (PHASE8 8.4) idempotent orchestration — prepares + generates GSTR-1 **and** GSTR-3B in one call; returns per-return status envelope |
+| GET | `/gst-accounts/{gstin}/months/{fp}/gstr1/export.json` | GSTR-1 JSON payload |
+| GET | `/gst-accounts/{gstin}/months/{fp}/gstr1/export.xlsx` | (PHASE8 8.4) real `.xlsx` (openpyxl, OSS) — same numbers as the JSON: one payload, rendered twice; paise→₹ only at render |
+| GET | `/gst-accounts/{gstin}/months/{fp}/gstr3b/export.json` | GSTR-3B JSON payload |
+| GET | `/gst-accounts/{gstin}/months/{fp}/gstr3b/export.xlsx` | (PHASE8 8.4) real `.xlsx` — same contract as gstr1/export.xlsx |
+| GET | `/gst-accounts/{gstin}/months/{fp}/gstr1/hsn-summary` | (PHASE8 8.4) HSN summary table; totals reconcile to the GSTR-1 payload |
+| GET | `/gst-accounts/{gstin}/months/{fp}/returns/validation` | (PHASE8 8.4) pre-filing error-catcher: `{blocking: [], warnings: []}` — blocking entries must be resolved before file |
 | GET | `/gst-accounts/{gstin}/months/{fp}/gstr1/exports` | history (immutable) |
 | GET | `/exports/{exportId}/download` | step-up; presigned JSON URL |
 | POST | `/gst-accounts/{gstin}/months/{fp}/gstr1/nil` | nil-return JSON |

@@ -139,35 +139,40 @@ Phase 4: GSP adapter → GSTN · IRP adapter → NIC (sandbox in Phase 1)
 
 ```
 D:/gst_filing_app/
-├── docs/                          # 8 canonical docs (see README.md)
+├── docs/                          # canonical docs (see docs/README.md) + AI_HANDOFF (start here)
 ├── backend/
 │   ├── app/
-│   │   ├── core/                  # auth (email OTP/password), users, gst_accounts,
-│   │   │                          # registrations, linking, consent, audit, notify
-│   │   ├── documents/            # upload API, MinIO client, job orchestration
-│   │   ├── extraction/           # worker: preprocess (scan/photo branches), OCR,
-│   │   │                          # LLM (pinned model), validator
-│   │   ├── gst/                   # calculator (ported), invoices, CDNs, series,
-│   │   │                          # periods, gstin/checksum
-│   │   ├── returns/               # gstr1 (schema+generator+validator), gstr1a,
-│   │   │                          # gstr3b, irp adapter (sandbox/live)
-│   │   ├── itc/                   # 2B parser, reconciliation engine
-│   │   ├── api/                   # FastAPI routers wiring the modules
-│   │   ├── db/                    # SQLAlchemy models, Alembic migrations
+│   │   ├── api/                   # FastAPI routers (auth, documents, gst_accounts, returns,
+│   │   │                          # profile, settings, notifications, dpdp, itc, einvoice)
+│   │   │                          # + schemas.py — the compiled Pydantic contract
+│   │   ├── core/                  # access guard (require_gstin_access), audit,
+│   │   │                          # gstin validation, auth/ (OTP, JWT rotation, TOTP,
+│   │   │                          # Redis sessions), gst_accounts/ (service layer)
+│   │   ├── services/              # documents (MinIO), review, notifications, retention,
+│   │   │                          # dpdp, irp_service, returns/ (gstr1, gstr1a, gstr3b,
+│   │   │                          # gstr2b, pipeline, validation, xlsx_export, gsp adapters)
+│   │   ├── extraction/            # worker: preprocess (scan/photo branches), OCR,
+│   │   │                          # LLM (pinned model), validator, seed
+│   │   ├── db/                    # SQLAlchemy models (core/gst/extraction schemas), session
 │   │   └── config.py
-│   ├── tests/                     # pytest; golden vectors for calculator
-│   ├── pyproject.toml
-│   └── alembic/
-├── frontend/                      # Next.js App Router
+│   ├── tests/                     # pytest — 41 modules, 243 tests; shared v4_helpers seed
+│   ├── alembic/                   # migrations
+│   └── pyproject.toml
+├── frontend/                      # Next.js 16 App Router
 │   ├── app/
 │   │   ├── (auth)/                # login, register, totp setup
-│   │   ├── client/…               # client shell routes
-│   │   └── ca/…                    # CA-firm shell routes
-│   ├── components/                # shadcn/ui + domain components
-│   └── lib/                       # api client, types (generated from Pydantic)
-├── extraction/golden_set/         # ground truth + harness fixtures (existing)
-├── scripts/                      # measure_extraction.py (existing), bootstrap, e2e
-└── tools/                         # PG/Redis/MinIO configs, mc mirror, backup
+│   │   ├── (client)/app/          # unified shell: dashboard, businesses, upload, review,
+│   │   │                          # returns workspace, profile, settings, file, einvoice
+│   │   └── (ca)/ca/               # CA roster view (additive)
+│   ├── components/shared/         # ShellNav (persistent nav + GSTIN switcher), ui/
+│   ├── lib/                       # typed API client, session helpers
+│   └── tests/                     # Playwright E2E — 10 spec files
+├── extraction/golden_set/         # ground truth + harness fixtures
+├── scripts/                       # bootstrap_stack, build_loop, seed_demo, app_tour.cjs,
+│                                  # generate_tracker, e2e_phase0..8
+├── test-samples/                  # ready-to-upload fixtures (valid + failure cases)
+├── tools/                         # PG/Redis/MinIO configs, mc mirror, backup (gitignored)
+└── build/                         # 3-agent loop state (gitignored)
 ```
 
 **Ports:** API 8084 · Web 9094 · PG 5436 · Redis 6380 · MinIO 9001/9002 · FreeLLMAPI 3001 (external, already running). Zero clash with Farmer App (8080–8083, 9091–9093, 5432–35, 9000).
@@ -208,3 +213,4 @@ D:/gst_filing_app/
 | v2.0 | 2026-09-26 | All 18 review findings folded in (multi-GSTIN businesses, CA firms, 3B/ITC first-class, DPDP, etc.) |
 | v3.0 | 2026-09-26 | **AI-first stack**: Python/FastAPI backend (extraction folded in), Next.js/TS frontend; Java/Flutter retired; GstCalculator port to Python gated by Java-reference test vectors; IRP port deferred w/ escape hatch |
 | v4.0 | 2026-10-02 | **Unified GSTIN-first model**: removed CA firms, businesses, business_users, ca_client_links, consent_records. GSTIN is the primary key. Users attach GSTINs via user_gst_access. Email is the login credential. Single unified web shell. |
+| v5.0 | 2026-10-09 | **Product completeness (Phase 8)**: profile + settings + business-management APIs, persistent app-shell nav (Dashboard/Businesses/Upload/Returns/Profile/Settings + GSTIN switcher), returns generate orchestration with real `.xlsx` export (openpyxl, OSS) + HSN summary + pre-file validation, dashboard filing-status grid. Build complete: 59/59 tasks. |

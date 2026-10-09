@@ -26,6 +26,9 @@
 | A user cannot browse GSTINs they don't have access to | Enforced at service layer; covered by an explicit test |
 | Every filing object resolves through a `gstin` → gst_accounts → user_gst_access chain | No endpoint accepts a raw GSTIN without the guard |
 | Locked periods: FILED periods reject invoice/CDN mutations; amendments are delta records only | Service-layer rule + test |
+| Profile is self-service but minimal: only `full_name` is patchable; `email` is read-only by schema (`extra="forbid"` → 422, never silent) (PHASE8 8.1) | Pydantic validation layer + test |
+| Settings writes never duplicate logic: `PATCH /me/settings` delegates to the notification-prefs handler — one validation path, one transaction, one audit surface (PHASE8 8.2) | Single-handler delegation, integration-tested |
+| Business edits (`PATCH /gst-accounts/{gstin}`) require FILER/ADMIN; VIEWER → 403; unknown GSTIN → 404 `GSTIN_NOT_FOUND` (existence is data) (PHASE8 8.3) | `require_gstin_access` guard + matrix tests |
 
 ## 3. Data protection
 
@@ -59,6 +62,8 @@
 | Export generation / download | actor, gstin, fp, schema_version |
 | Amendment create / export | actor, gstin, deltas |
 | Auth events: login, OTP fail-storm, TOTP enable | actor, ip, user-agent |
+| Profile update (`PATCH /me/profile`) | actor; event `PROFILE_UPDATED` (PHASE8 8.1) |
+| Business (GSTIN) field edits (`PATCH /gst-accounts/{gstin}`) | actor, gstin, changed fields (PHASE8 8.3) |
 
 Audit rows are append-only; no update/delete paths exist in code; DB role has INSERT-only grant on `audit_logs` (migration-enforced).
 

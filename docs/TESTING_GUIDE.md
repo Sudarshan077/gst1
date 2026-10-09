@@ -28,16 +28,17 @@ npm run lint                                                # lint
 npx playwright test tests/task7-2-upload-to-output.spec.ts  # upload→output happy path
 ```
 
-### Expected results (as of the last full run)
+### Expected results (as of the last full run — Phase-8 exit, 9 Oct 2026)
 | Gate | Result | Note |
 |---|---|---|
-| `pytest tests/ -q --no-cov` | **210 passed, 0 failed** | junit-verified |
-| `pytest tests/ -q` | 210 passed but **FAIL: coverage 79.4 % < 80 %** | pre-existing floor gap at HEAD (79.42 %); not a test failure |
-| `ruff check .` | clean | |
-| `mypy .` | 67 errors, **all in `tests/`** | identical at HEAD; 0 in `app/` |
+| `pytest tests/ -q --no-cov` | **243 passed, 0 failed** | verified live |
+| `pytest tests/ -q` | **243 passed, 0 failed, coverage 80.20 % ≥ 80 %** | floor met |
+| `ruff check .` (backend) | clean | |
+| `mypy app/` | **clean — 0 issues in 66 source files** | gate is `app/`; pre-existing `tests/` errors out of scope |
 | `npx tsc --noEmit` | clean (exit 0) | |
 | `npm run lint` | clean (exit 0) | |
-| `npx playwright test task7-2…` | **1 passed** | needs backend :8084 up |
+| `npx playwright test` | **18 passed** (1 worker) | needs backend :8084 up; a first run may flake 1 test that the retry passes |
+| `python scripts/e2e_phase8.py` | **ALL LENSES PASSED** (Code / Frontend / GST-domain) | the final gate |
 
 > To get an unambiguous pass count when the pytest summary line vanishes, add `--junitxml=<absolute native path>` and parse the `testsuite` attributes. MSYS `$TMPDIR` is invisible to native python — use a `C:/...` path.
 
@@ -45,15 +46,16 @@ npx playwright test tests/task7-2-upload-to-output.spec.ts  # upload→output ha
 
 ## 2. Test inventory
 
-### Backend — `backend/tests/` (36 test modules, 210 tests)
+### Backend — `backend/tests/` (41 test modules, 243 tests)
 | Area | Modules |
 |---|---|
-| Auth | `test_auth_otp`, `test_auth_password`, `test_auth_refresh`, `test_auth_totp`, `test_auth_me` |
+| Auth | `test_auth_otp`, `test_auth_password`, `test_auth_refresh`, `test_auth_totp`, `test_auth_me`, `test_auth_logout_all` |
 | Access & tenancy | `test_access_guard`, `test_critical_gstin` |
-| GST accounts & models | `test_gst_accounts`, `test_db_models`, `test_migrations`, `test_skeleton` |
+| Account (PHASE8) | `test_profile_router`, `test_settings_router` |
+| GST accounts & models | `test_gst_accounts`, `test_db_models`, `test_migrations`, `test_skeleton`, `test_business_mgmt_overview` |
 | Documents & review | `test_documents`, `test_review_flow`, `test_review_service` |
 | Extraction | `test_extraction_pipeline`, `test_extraction_preprocess`, `test_extraction_validator`, `test_extraction_worker` |
-| Returns | `test_gstr1`, `test_gstr1a`, `test_gstr2b_itc`, `test_returns`, `test_returns_services` |
+| Returns | `test_gstr1`, `test_gstr1a`, `test_gstr2b_itc`, `test_returns`, `test_returns_services`, `test_returns_generate` |
 | Filing (GSP/IRP) | `test_gsp`, `test_gsp_irp_onboarding`, `test_irp_live_gated`, `test_einvoice` |
 | Compliance | `test_dpdp`, `test_notification_prefs`, `test_notifications`, `test_notifications_router` |
 | Deadlines | `test_deadline`, `test_critical_deadline` |
@@ -65,10 +67,16 @@ npx playwright test tests/task7-2-upload-to-output.spec.ts  # upload→output ha
 ### Frontend — `frontend/tests/`
 | Spec | Covers |
 |---|---|
-| `auth-onboarding.spec.ts` | email login → shell onboarding |
-| `phase4-filing.spec.ts` | sandbox GSP filing flow |
+| `auth-onboarding.spec.ts` | email login → shell onboarding, route guards |
+| `phase4-filing.spec.ts` | sandbox GSP filing flow, IRN board |
+| `phase8-product-shell.spec.ts` | **nav reachability audit** — every Phase-8 screen reachable by clicking from `/app` |
+| `phase8-profile.spec.ts` | profile: edit name → save → persists; email read-only |
+| `phase8-settings.spec.ts` | settings: prefs toggle persists; TOTP enrollment link; sign-out-everywhere revokes the other session |
+| `phase8-businesses.spec.ts` | businesses: add GSTIN → list → detail → edit legal_name; client-side mod-36 checksum rejection |
+| `phase8-dashboard-status-grid.spec.ts` | dashboard filing-status grid (filed/draft/pending per period) |
+| `phase8-returns-workspace.spec.ts` | generate → status → HSN table → validation checklist → Excel download |
 | `task7-2-upload-to-output.spec.ts` | **upload → extract → review → confirm → GSTR-1/3B download** |
-| `totp-utils.ts` | TOTP test helper |
+| `totp-utils.ts` | TOTP test helper (not a test) |
 
 ---
 
