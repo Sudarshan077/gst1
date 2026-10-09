@@ -1,9 +1,18 @@
 "use client";
 
 /**
- * Review-confirm screen for a single document (Task 7.2).
+ * Review-confirm screen for a single document (Task 7.2, reworked Phase 9 9.1).
  * Shows extracted fields + validation flags and lets the user confirm
- * (if clean) or edit and re-confirm.
+ * (if clean) or edit ANY draft field and re-confirm.
+ *
+ * Phase 9 9.1 — full-field review editor:
+ *   - All editable draft fields save via PUT draft (updateDraft) on blur.
+ *   - GSTIN fields are checksum-validated client-side (mod-36) BEFORE any
+ *     network call; the server re-validates regardless.
+ *   - Paise fields are integers end-to-end (no float crosses the boundary).
+ *   - The two original quick-edit inputs (invoice_no, total_value_paise) keep
+ *     their behaviour; everything else is additive.
+ *   - Flags panel + confirm gating (BLOCK flags) unchanged.
  */
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -15,6 +24,7 @@ import {
   getDraft,
   updateDraft,
 } from "@/lib/api/client";
+import { gstinChecksumValid } from "@/lib/validation/gstin";
 
 function paiseText(value: unknown): string {
   const n = typeof value === "number" ? value : Number(value);
@@ -52,6 +62,53 @@ function FieldRow({
   );
 }
 
+/** One editable field row: label + input, saved on blur. */
+function EditField({
+  label,
+  testid,
+  value,
+  type,
+  onCommit,
+  invalid,
+  hint,
+}: {
+  label: string;
+  testid: string;
+  value: string;
+  type: "text" | "number";
+  onCommit: (raw: string) => void;
+  invalid?: boolean;
+  hint?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-xs" htmlFor={`edit-${testid}`}>
+        {label}
+      </label>
+      <input
+        id={`edit-${testid}`}
+        data-testid={`edit-${testid}`}
+        type={type}
+        defaultValue={value}
+        onBlur={(e) => onCommit(e.target.value)}
+        className={`w-full rounded-md border px-3 py-2 text-sm dark:bg-slate-800 ${
+          invalid
+            ? "border-red-400 dark:border-red-600"
+            : "border-slate-300 dark:border-slate-700"
+        }`}
+      />
+      {hint !== undefined && (
+        <p
+          className={`mt-1 text-xs ${invalid ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-slate-400"}`}
+          data-testid={`${testid}-hint`}
+        >
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function ReviewPage() {
   const params = useParams<{ gstin: string; fp: string; docId: string }>();
   const router = useRouter();
@@ -62,6 +119,8 @@ export default function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+  // Per-field transient messages, keyed by field name (e.g. buyer_gstin).
+  const [fieldNotes, setFieldNotes] = useState<Record<string, string>>({});
 
   async function load() {
     try {
@@ -92,12 +151,115 @@ export default function ReviewPage() {
     }
   }
 
-  async function saveField(key: string, value: unknown) {
+  /**
+   * Save one field on blur. GSTIN fields go through the client-side mod-36
+   * checksum first — a corrupted GSTIN never reaches the network. Paise
+   * fields must parse as integer paise (no floats cross the boundary).
+   */
+  async function saveField(key: string, raw: string) {
+    if (draft === null) return;
+    const fields = draft.fields ?? {};
+    const current = fields[key];
+
+    if (key === "buyer_gstin" || key === "supplier_gstin") {
+      const next = raw.trim() === "" ? null : raw.trim().toUpperCase();
+      // B2C invoices legitimately have no buyer GSTIN; empty is allowed there.
+      if (next !== null && !gstinChecksumValid(next)) {
+        setFieldNotes((n) => ({
+          ...n,
+          [key]: "Invalid GSTIN — format or checksum fails the mod-36 rule. Not saved.",
+        }));
+        return;
+      }
+      if (current === next) {
+        // Unchanged (after normalisation) — nothing to send.
+        setFieldNotes((n) => ({ ...n, [key]: "" }));
+        return;
+      }
+      try {
+        const updated = await updateDraft(docId, { [key]: next });
+        setDraft(updated);
+        setFieldNotes((n) => ({ ...n, [key]: "" }));
+      } catch (err) {
+        setFieldNotes((n) => ({
+          ...n,
+          [key]: err instanceof ApiError ? err.message : "update failed",
+        }));
+      }
+      return;
+    }
+
+    if (key === "is_inter_state" || key === "rchrg") {
+      // Toggle rows render as buttons; they use toggleField instead.
+      return;
+    }
+
+    if (
+      key === "taxable_value_paise" ||
+      key === "total_value_paise" ||
+      key === "cgst_paise" ||
+      key === "sgst_paise" ||
+      key === "igst_paise" ||
+      key === "cess_paise"
+    ) {
+      const trimmed = raw.trim();
+      if (trimmed === "") return;
+      if (!/^-?\d+$/.test(trimmed)) {
+        setFieldNotes((n) => ({
+          ...n,
+          [key]: "Paise amounts must be whole integer paise (no decimals). Not saved.",
+        }));
+        return;
+      }
+      const next = Number(trimmed); // integer string -> exact int
+      if (current === next) {
+        setFieldNotes((n) => ({ ...n, [key]: "" }));
+        return;
+      }
+      try {
+        const updated = await updateDraft(docId, { [key]: next });
+        setDraft(updated);
+        setFieldNotes((n) => ({ ...n, [key]: "" }));
+      } catch (err) {
+        setFieldNotes((n) => ({
+          ...n,
+          [key]: err instanceof ApiError ? err.message : "update failed",
+        }));
+      }
+      return;
+    }
+
+    // invoice_no / invoice_date / place_of_supply
+    const next = raw.trim() === "" ? null : raw.trim();
+    if (current === next) {
+      setFieldNotes((n) => ({ ...n, [key]: "" }));
+      return;
+    }
     try {
-      const updated = await updateDraft(docId, { [key]: value });
+      const updated = await updateDraft(docId, { [key]: next });
       setDraft(updated);
+      setFieldNotes((n) => ({ ...n, [key]: "" }));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "update failed");
+      setFieldNotes((n) => ({
+        ...n,
+        [key]: err instanceof ApiError ? err.message : "update failed",
+      }));
+    }
+  }
+
+  /** Boolean toggle rows (is_inter_state / rchrg) — save on click. */
+  async function toggleField(key: "is_inter_state" | "rchrg") {
+    if (draft === null) return;
+    const next = !(draft.fields?.[key] as boolean | undefined);
+    try {
+      const updated = await updateDraft(docId, { [key]: next });
+      setDraft(updated);
+      setFieldNotes((n) => ({ ...n, [key]: "" }));
+    } catch (err) {
+      setFieldNotes((n) => ({
+        ...n,
+        [key]: err instanceof ApiError ? err.message : "update failed",
+      }));
     }
   }
 
@@ -116,7 +278,7 @@ export default function ReviewPage() {
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Review & confirm</h1>
+        <h1 className="text-2xl font-semibold">Review &amp; confirm</h1>
         <button
           type="button"
           onClick={() => router.push(`/app/file/${gstin}/${fp}`)}
@@ -239,26 +401,131 @@ export default function ReviewPage() {
 
       {draft !== null && (
         <div className="mt-8 rounded-xl border border-slate-200 p-5 dark:border-slate-800">
-          <h2 className="font-semibold">Quick edit (demo)</h2>
+          <h2 className="font-semibold">Edit draft fields</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Every field saves individually on blur (PUT draft). GSTINs are
+            checksum-validated client-side before sending; the server
+            re-validates. Paise fields are integer paise.
+          </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <EditField
+              label="Invoice no"
+              testid="invoice_no"
+              type="text"
+              value={String(fields.invoice_no ?? "")}
+              onCommit={(raw) => saveField("invoice_no", raw)}
+            />
+            <EditField
+              label="Invoice date (YYYY-MM-DD)"
+              testid="invoice_date"
+              type="text"
+              value={String(fields.invoice_date ?? "")}
+              onCommit={(raw) => saveField("invoice_date", raw)}
+            />
+            <EditField
+              label="Supplier GSTIN"
+              testid="supplier_gstin"
+              type="text"
+              value={String(fields.supplier_gstin ?? "")}
+              onCommit={(raw) => saveField("supplier_gstin", raw)}
+              invalid={!!fieldNotes.supplier_gstin?.startsWith("Invalid")}
+              hint={fieldNotes.supplier_gstin}
+            />
+            <EditField
+              label="Buyer GSTIN"
+              testid="buyer_gstin"
+              type="text"
+              value={String(fields.buyer_gstin ?? "")}
+              onCommit={(raw) => saveField("buyer_gstin", raw)}
+              invalid={!!fieldNotes.buyer_gstin?.startsWith("Invalid")}
+              hint={fieldNotes.buyer_gstin}
+            />
+            <EditField
+              label="Place of supply (2-digit state code)"
+              testid="place_of_supply"
+              type="text"
+              value={String(fields.place_of_supply ?? "")}
+              onCommit={(raw) => saveField("place_of_supply", raw)}
+            />
+
             <div>
-              <label className="block text-xs">Invoice no</label>
-              <input
-                type="text"
-                defaultValue={String(fields.invoice_no ?? "")}
-                onBlur={(e) => saveField("invoice_no", e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
-              />
+              <span className="block text-xs">Inter-state</span>
+              <button
+                type="button"
+                data-testid="edit-is_inter_state"
+                onClick={() => toggleField("is_inter_state")}
+                className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+              >
+                {fields.is_inter_state ? "Yes" : "No"}
+              </button>
             </div>
+
             <div>
-              <label className="block text-xs">Total value (paise)</label>
-              <input
-                type="number"
-                defaultValue={String(fields.total_value_paise ?? 0)}
-                onBlur={(e) => saveField("total_value_paise", Number(e.target.value))}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
-              />
+              <span className="block text-xs">Reverse charge (rchrg)</span>
+              <button
+                type="button"
+                data-testid="edit-rchrg"
+                onClick={() => toggleField("rchrg")}
+                className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+              >
+                {fields.rchrg ? "Yes" : "No"}
+              </button>
             </div>
+
+            <EditField
+              label="Taxable value (paise)"
+              testid="taxable_value_paise"
+              type="number"
+              value={String(fields.taxable_value_paise ?? 0)}
+              onCommit={(raw) => saveField("taxable_value_paise", raw)}
+              hint={fieldNotes.taxable_value_paise}
+              invalid={!!fieldNotes.taxable_value_paise?.startsWith("Paise")}
+            />
+            <EditField
+              label="Total value (paise)"
+              testid="total_value_paise"
+              type="number"
+              value={String(fields.total_value_paise ?? 0)}
+              onCommit={(raw) => saveField("total_value_paise", raw)}
+              hint={fieldNotes.total_value_paise}
+              invalid={!!fieldNotes.total_value_paise?.startsWith("Paise")}
+            />
+            <EditField
+              label="CGST (paise)"
+              testid="cgst_paise"
+              type="number"
+              value={String(fields.cgst_paise ?? 0)}
+              onCommit={(raw) => saveField("cgst_paise", raw)}
+              hint={fieldNotes.cgst_paise}
+              invalid={!!fieldNotes.cgst_paise?.startsWith("Paise")}
+            />
+            <EditField
+              label="SGST (paise)"
+              testid="sgst_paise"
+              type="number"
+              value={String(fields.sgst_paise ?? 0)}
+              onCommit={(raw) => saveField("sgst_paise", raw)}
+              hint={fieldNotes.sgst_paise}
+              invalid={!!fieldNotes.sgst_paise?.startsWith("Paise")}
+            />
+            <EditField
+              label="IGST (paise)"
+              testid="igst_paise"
+              type="number"
+              value={String(fields.igst_paise ?? 0)}
+              onCommit={(raw) => saveField("igst_paise", raw)}
+              hint={fieldNotes.igst_paise}
+              invalid={!!fieldNotes.igst_paise?.startsWith("Paise")}
+            />
+            <EditField
+              label="CESS (paise)"
+              testid="cess_paise"
+              type="number"
+              value={String(fields.cess_paise ?? 0)}
+              onCommit={(raw) => saveField("cess_paise", raw)}
+              hint={fieldNotes.cess_paise}
+              invalid={!!fieldNotes.cess_paise?.startsWith("Paise")}
+            />
           </div>
         </div>
       )}
