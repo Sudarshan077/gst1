@@ -3,8 +3,8 @@
 **Repo:** `github.com/Sudarshan077/gst1` · **Branch:** `main`  
 **Stack:** Python 3.11 (FastAPI · SQLAlchemy · Alembic · PostgreSQL) backend · Next.js 16 + TypeScript (App Router · Tailwind · shadcn/ui) frontend  
 **Build mode:** 3-agent loop — Builder / Tester / Monitor. Every task is independently verified by the Tester (real command output: pytest, ruff, mypy, tsc, Playwright) before the Monitor may ADVANCE it. Backend and frontend are built together in the same loop.  
-**Last updated:** 2026-10-09 17:32 IST  
-**Progress:** **66 / 66 tasks done (100%)**
+**Last updated:** 2026-10-09 20:53 IST  
+**Progress:** **70 / 71 tasks done (98%)**
 
 ---
 
@@ -22,7 +22,8 @@
 | 7 | UX/Core Flow Redesign (email-only auth, single user, upload-to-output) — Tony, 6 Oct | 3 | 3 | 0 | ✅ Complete |
 | 8 | Product Completeness: Profile, Settings, Business Management & Filing-Ready Returns — Tony, 8 Oct | 11 | 11 | 0 | ✅ Complete |
 | 9 | QA Sweep Fixes: Review UX, Extraction Feedback, Empty States, Batch Upload & ITC Visibility — Tony, 9 Oct | 7 | 7 | 0 | ✅ Complete |
-| **Total** | | **66** | **66** | **0** | |
+| 10 | Bug Sweep: FY rollover, shell nav, coverage gate, checksum hint — Tony, 9 Oct | 5 | 4 | 1 | 🔄 In progress |
+| **Total** | | **71** | **70** | **1** | |
 
 ---
 
@@ -143,6 +144,16 @@
 | 9.4 | Frontend: ITC reconciliation dashboard (/app/itc/[gstin]/[fp], books vs 2B, badges, 3B prefill) | ✅ Done | `PHASE9_QA_SWEEP_FIXES.md`, `FRONTEND_SPECIFICATION.md`, `API_SPECIFICATION.md` |
 | 9.5 | Backend: WARN-tier advisory validation rules (stale invoice date, short HSN) | ✅ Done | `PHASE9_QA_SWEEP_FIXES.md`, `EXTRACTION_SPEC.md`, `TESTING_GUIDE.md` |
 | 9.6 | Phase-9 E2E + full regression (3-lens) + reachability audit update | ✅ Done | `PHASE9_QA_SWEEP_FIXES.md`, `VERIFICATION_SWEEP.md` |
+
+### Phase 10 — Bug Sweep: FY rollover, shell nav, coverage gate, checksum hint — Tony, 9 Oct
+
+| ID | Task | Status | Source docs |
+|---|---|---|---|
+| 10.1 | Backend: fix FY month rollover in get_this_fy_period_statuses (13/14/15 -> Jan-Mar of next calendar year) | ✅ Done | `PHASE10_BUG_SWEEP_FIXES.md`, `API_SPECIFICATION.md` |
+| 10.2 | Frontend: shared client layout rendering ShellNav on every (client)/app route (upload/returns/review/einvoice/file), no double header | ✅ Done | `PHASE10_BUG_SWEEP_FIXES.md`, `FRONTEND_SPECIFICATION.md` |
+| 10.3 | Backend: cross the 80% coverage gate (79.95% -> >=80.00%) with targeted tests | ✅ Done | `PHASE10_BUG_SWEEP_FIXES.md`, `TESTING_GUIDE.md` |
+| 10.4 | Frontend: live mod-36 checksum feedback on the Add Business form | ✅ Done | `PHASE10_BUG_SWEEP_FIXES.md`, `FRONTEND_SPECIFICATION.md` |
+| 10.5 | Phase-10 E2E + full regression (3-lens) + tracker regeneration | 🔄 In progress | `PHASE10_BUG_SWEEP_FIXES.md`, `VERIFICATION_SWEEP.md` |
 
 ---
 
