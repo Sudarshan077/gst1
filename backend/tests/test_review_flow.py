@@ -361,6 +361,29 @@ async def test_confirm_duplicate_invoice_no_returns_409(
     assert "duplicate invoice_no" in resp.json()["error"]["message"]
 
 
+async def test_confirm_succeeds_with_warn_only_advisory_flags(
+    client: httpx.AsyncClient, api_sessionmaker: async_sessionmaker[Any]
+) -> None:
+    """Phase 9 9.5: WARN-only advisory flags must NOT block confirm (→ 200)."""
+    headers, gstin, doc_id = await _seeded_doc(client, api_sessionmaker)
+    fields = _clean_fields(gstin, make_gstin(state_code="27"))
+    # Stale date (2026-08-01 is 60 days before the 092026 period end) drives
+    # STALE_INVOICE_DATE; the draft's 4-digit HSN drives SHORT_HSN. Both WARN.
+    fields["invoice_date"] = "2026-08-01"
+    await _attach_draft(api_sessionmaker, doc_id, gstin, FP, fields)
+
+    draft_resp = await client.get(f"/api/v1/documents/{doc_id}/draft", headers=headers)
+    assert draft_resp.status_code == 200, draft_resp.text
+    flags = draft_resp.json()["data"]["flags"]
+    warn_rules = {f["rule"] for f in flags if f["severity"] == "WARN"}
+    assert {"STALE_INVOICE_DATE", "SHORT_HSN"} <= warn_rules
+    assert all(f["severity"] != "BLOCK" for f in flags)
+
+    resp = await client.post(f"/api/v1/documents/{doc_id}/confirm", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert "invoice_id" in resp.json()["data"]
+
+
 async def test_confirm_on_locked_period_returns_423(
     client: httpx.AsyncClient, api_sessionmaker: async_sessionmaker[Any]
 ) -> None:

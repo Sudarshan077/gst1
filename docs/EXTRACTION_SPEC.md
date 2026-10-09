@@ -112,6 +112,8 @@ A document is **auto-confirmed** only when *every* mandatory field is present an
 
 Runs after LLM extraction, before anything is confirmed. Violations → `NEEDS_REVIEW` (amber flag) or auto-correction where the rule is deterministic.
 
+Severity vocabulary: `BLOCK` (cannot confirm), `FLAG` (needs review), `AUTO_CORRECT` (deterministic fix applied + flagged), `SUGGEST` (inference hint), **`WARN` (advisory — non-blocking)**. Only `BLOCK` locks confirmation (`services/review.py confirm_draft` filters `BLOCK` only); a `WARN`-only draft confirms with 200.
+
 | Rule | Action on violation |
 |---|---|
 | GSTIN format `^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$` + mod-36 checksum (both parties) | FLAG — invalid GSTIN never proceeds; review forces human re-key |
@@ -123,6 +125,8 @@ Runs after LLM extraction, before anything is confirmed. Violations → `NEEDS_R
 | Duplicate invoice_no within (registration, fp) | FLAG — potential re-upload or genuine duplicate series |
 | `rchrg`/`inv_typ` inference from invoice keywords (e.g. "SEZ", "deemed export", "reverse charge") | SUGGEST — confirm in review |
 | Negative amounts, zero-value lines | FLAG |
+| Invoice date more than 30 days before the period end | WARN — advisory; ITC eligibility window, never blocks |
+| HSN/SAC shorter than 6 digits (or blank) | WARN — advisory; HSN summary will be incomplete, never blocks |
 
 ---
 

@@ -11,11 +11,15 @@ Rules:
   - Duplicate invoice_no within (registration, fp)
   - rchrg/inv_typ inference from keywords
   - Negative amounts / zero-value lines flag
+  - Advisory WARN rules (Phase 9 9.5): stale invoice date, short HSN/SAC.
+    WARN never blocks confirmation (review.py confirm filters BLOCK only).
 """
 
 from __future__ import annotations
 
+import calendar
 import re
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -32,6 +36,14 @@ from app.extraction.models import (
 VALID_STATE_CODES: frozenset[str] = frozenset(
     f"{i:02d}" for i in range(1, 38)
 ) | {"97", "98", "99"}
+
+# --- Advisory (WARN-tier) rule thresholds, Phase 9 task 9.5 ----------------
+# WARN is non-blocking: ``confirm_draft`` filters BLOCK only, so a WARN-only
+# draft confirms with 200. WARN does route the job to human review instead of
+# auto-confirm (an advisory finding is exactly "a human should look").
+ADVISORY_SEVERITY = "WARN"
+STALE_INVOICE_DAYS = 30
+MIN_HSN_DIGITS = 6
 
 MANDATORY_FIELDS: tuple[str, ...] = (
     "supplier_gstin",
@@ -74,6 +86,36 @@ def _derive_fp(invoice_date: str | None) -> str | None:
     if not m:
         return None
     return f"{m.group(2)}{m.group(1)}"
+
+
+def _parse_date(value: str | None) -> date | None:
+    """Parse "YYYY-MM-DD" to a date, or None when absent/malformed."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _period_end(fp: str | None) -> date | None:
+    """Last calendar day of the MMYYYY filing period, or None if unparseable."""
+    if not fp:
+        return None
+    m = re.match(r"^(\d{2})(\d{4})$", fp)
+    if not m:
+        return None
+    month, year = int(m.group(1)), int(m.group(2))
+    if not 1 <= month <= 12:
+        return None
+    return date(year, month, calendar.monthrange(year, month)[1])
+
+
+def _hsn_digits(value: str | None) -> int:
+    """Count digits in an HSN/SAC code (the GSTN key is numeric-only)."""
+    if not value:
+        return 0
+    return sum(1 for ch in value if ch.isdigit())
 
 
 def _money_diff(a: int | None, b: int | None) -> int:
@@ -210,6 +252,7 @@ def validate_extraction(
     registration_pan: str | None = None,
     ocr_text: str = "",
     existing_invoice_nos: set[str] | None = None,
+    period_fp: str | None = None,
 ) -> ValidationResult:
     """Run all EXTRACTION_SPEC §6 validation rules.
 
@@ -218,6 +261,9 @@ def validate_extraction(
         registration_pan: business PAN for cross-check against supplier_gstin.
         ocr_text: raw OCR text used for rchrg/inv_typ keyword inference.
         existing_invoice_nos: set of invoice_no already in the period.
+        period_fp: MMYYYY filing period the document is filed into; when given,
+            the advisory stale-invoice-date rule measures the invoice age
+            against the period end (deterministic, not wall-clock "now").
     """
     flags: list[ValidationFlag] = []
     fields = doc.fields
@@ -355,6 +401,48 @@ def validate_extraction(
                 message="line taxable value is zero or negative",
             ))
 
+    # --- 10. Advisory (WARN-tier) rules — Phase 9 task 9.5 ------------------
+    # These never block: ``confirm_draft`` filters BLOCK only, so a draft whose
+    # only flags are WARN confirms with 200. They keep the job in review
+    # (an advisory finding is "a human should look"), they never auto-correct
+    # data, and they never add a BLOCK.
+
+    # 10a. Stale invoice date: invoice dated more than 30 days before the
+    # period end. Measured against the period end when the caller supplies the
+    # filing period (deterministic); no period → no advisory (never guess).
+    invoice_dt = _parse_date(fields.invoice_date)
+    period_end = _period_end(period_fp)
+    if invoice_dt is not None and period_end is not None:
+        age_days = (period_end - invoice_dt).days
+        if age_days > STALE_INVOICE_DAYS:
+            flags.append(ValidationFlag(
+                rule="STALE_INVOICE_DATE",
+                severity=ADVISORY_SEVERITY,
+                field="invoice_date",
+                message=(
+                    f"invoice_date {fields.invoice_date} is {age_days} days "
+                    f"before period end {period_end.isoformat()} "
+                    f"(> {STALE_INVOICE_DAYS}); advisory — check the input "
+                    "tax credit eligibility window"
+                ),
+            ))
+
+    # 10b. HSN/SAC shorter than 6 digits (the GSTN HSN summary needs ≥ 6).
+    short_hsn = [
+        line for line in doc.lines if _hsn_digits(line.hsn_sac) < MIN_HSN_DIGITS
+    ]
+    if short_hsn:
+        flags.append(ValidationFlag(
+            rule="SHORT_HSN",
+            severity=ADVISORY_SEVERITY,
+            field="lines",
+            message=(
+                f"{len(short_hsn)} line(s) have an HSN/SAC shorter than "
+                f"{MIN_HSN_DIGITS} digits; advisory — the HSN summary will be "
+                "incomplete"
+            ),
+        ))
+
     # --- auto-confirm decision ----------------------------------------------
     threshold = AUTO_CONFIRM_CONFIDENCE.get(doc.capture_source, 0.90)
     eligible = True
@@ -371,7 +459,9 @@ def validate_extraction(
 
     if any(f.severity == "BLOCK" for f in flags):
         auto_confirm = AutoConfirmStatus.NEEDS_REVIEW
-    elif any(f.severity in {"FLAG", "AUTO_CORRECT", "SUGGEST"} for f in flags):
+    elif any(f.severity in {"FLAG", "AUTO_CORRECT", "SUGGEST", ADVISORY_SEVERITY} for f in flags):
+        # Advisory WARN keeps the doc in human review (it is a "human should
+        # look" finding) — it never blocks confirmation, which filters BLOCK only.
         auto_confirm = AutoConfirmStatus.NEEDS_REVIEW
     elif eligible:
         auto_confirm = AutoConfirmStatus.AUTO_CONFIRMED

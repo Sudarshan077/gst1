@@ -96,7 +96,8 @@ class ExtractedDocument(BaseModel):
 
 class ValidationFlag(BaseModel):
     rule: str
-    severity: str  # "FLAG" | "AUTO_CORRECT" | "BLOCK" | "SUGGEST"
+    # "FLAG" | "AUTO_CORRECT" | "BLOCK" | "SUGGEST" | "WARN" (WARN = advisory)
+    severity: str
     field: str | None = None
     message: str
 

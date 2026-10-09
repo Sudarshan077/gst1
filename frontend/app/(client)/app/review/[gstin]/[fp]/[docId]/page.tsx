@@ -273,7 +273,10 @@ export default function ReviewPage() {
 
   const fields = draft?.fields ?? {};
   const flags = draft?.flags ?? [];
+  // Only BLOCK flags lock confirmation (Phase 9 9.5): WARN-tier advisory flags
+  // and FLAG/SUGGEST/AUTO_CORRECT are non-blocking.
   const hasBlockingFlag = flags.some((f) => f.severity === "BLOCK");
+  const advisoryFlags = flags.filter((f) => f.severity === "WARN");
 
   return (
     <main className="mx-auto w-full max-w-4xl px-6 py-8">
@@ -323,17 +326,31 @@ export default function ReviewPage() {
       )}
 
       {flags.length > 0 && (
-        <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+        <div
+          className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950"
+          data-testid="review-flags"
+        >
           <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
             Validation flags
           </h2>
           <ul className="mt-2 list-inside list-disc text-sm text-amber-700 dark:text-amber-300">
             {flags.map((f, i) => (
-              <li key={i}>
+              <li key={i} data-testid="review-flag">
                 {f.rule} ({f.severity}): {f.message}
               </li>
             ))}
           </ul>
+          {advisoryFlags.length > 0 && (
+            <p
+              className="mt-3 text-xs text-amber-700 dark:text-amber-300"
+              data-testid="review-advisory-note"
+            >
+              {advisoryFlags.length} advisory flag
+              {advisoryFlags.length === 1 ? "" : "s"} (WARN) — non-blocking.
+              These do not prevent confirmation; review them at your
+              discretion.
+            </p>
+          )}
         </div>
       )}
 
@@ -395,7 +412,9 @@ export default function ReviewPage() {
         <p className="text-sm text-slate-500">
           {hasBlockingFlag
             ? "Blocking validation errors must be resolved before confirming."
-            : "All checks passed — confirm to add to the ledger."}
+            : advisoryFlags.length > 0
+              ? "Advisory flags noted (non-blocking) — you can still confirm."
+              : "All checks passed — confirm to add to the ledger."}
         </p>
       </div>
 

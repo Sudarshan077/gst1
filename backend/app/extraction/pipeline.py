@@ -30,6 +30,7 @@ async def run_pipeline(
     settings: Settings | None = None,
     registration_pan: str | None = None,
     existing_invoice_nos: set[str] | None = None,
+    period_fp: str | None = None,
 ) -> ExtractionResult:
     """Run full extraction pipeline on a single document payload.
 
@@ -43,6 +44,7 @@ async def run_pipeline(
         settings: runtime settings.
         registration_pan: business PAN for supplier cross-check.
         existing_invoice_nos: set of invoice numbers already in period.
+        period_fp: MMYYYY filing period, for advisory date-window rules.
     """
     settings = settings or get_settings()
     source = capture_source.upper()
@@ -102,6 +104,7 @@ async def run_pipeline(
         registration_pan=registration_pan,
         ocr_text=ocr_text,
         existing_invoice_nos=existing_invoice_nos,
+        period_fp=period_fp,
     )
 
     return ExtractionResult(
@@ -126,6 +129,7 @@ async def run_pipeline_many(
     settings: Settings | None = None,
     registration_pan: str | None = None,
     existing_invoice_nos: set[str] | None = None,
+    period_fp: str | None = None,
 ) -> ExtractionResult:
     """Run pipeline for photo bursts: preprocess images + assemble, then OCR/LLM."""
     settings = settings or get_settings()
@@ -181,6 +185,7 @@ async def run_pipeline_many(
         registration_pan=registration_pan,
         ocr_text=ocr_text,
         existing_invoice_nos=existing_invoice_nos,
+        period_fp=period_fp,
     )
 
     return ExtractionResult(

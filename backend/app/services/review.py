@@ -145,6 +145,7 @@ async def _run_validation(
         registration_pan=account.pan if account else None,
         ocr_text="",
         existing_invoice_nos=existing,
+        period_fp=doc.fp,
     )
 
 

@@ -198,6 +198,7 @@ async def run_job(
                 settings=settings,
                 registration_pan=pan,
                 existing_invoice_nos=existing_set,
+                period_fp=doc.fp,
             )
         else:
             result = await run_pipeline_many(
@@ -209,6 +210,7 @@ async def run_job(
                 settings=settings,
                 registration_pan=pan,
                 existing_invoice_nos=existing_set,
+                period_fp=doc.fp,
             )
 
         await _persist_result(session, job, doc, result)
