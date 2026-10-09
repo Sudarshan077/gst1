@@ -187,6 +187,11 @@ test.describe("manage businesses (/app/businesses)", () => {
     const corrupted = `${bad.slice(0, 14)}${bad[14] === "0" ? "1" : "0"}`; // checksum now wrong
 
     await page.getByTestId("business-add-gstin").fill(corrupted);
+    // 10.4: the live mod-36 error renders the moment 15 invalid chars are in
+    // the input — before any click.
+    await expect(page.getByTestId("business-add-live-error")).toBeVisible({
+      timeout: 5_000,
+    });
     await page.getByTestId("business-add-name").fill("Checksum Reject Co");
     await page.getByTestId("business-add-submit").click();
 

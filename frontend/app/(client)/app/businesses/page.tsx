@@ -6,8 +6,11 @@
  * with the same mod-36 rule (lib/validation/gstin.ts mirror; server always
  * re-validates). Phase 10.2: the header lives in the shared (client)/app
  * layout; adding a GSTIN pushes it into the ShellContext so the GSTIN switcher
- * updates. FRONTEND_SPECIFICATION.md §4: API errors render inline, no
- * silent catches; empty state has a designed next action.
+ * updates. Phase 10.4: once the input holds all 15 characters the mod-36 check
+ * digit is validated live and an inline error renders immediately (not only
+ * after submit); submit-button gating is unchanged. FRONTEND_SPECIFICATION.md
+ * §4: API errors render inline, no silent catches; empty state has a designed
+ * next action.
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -26,6 +29,7 @@ import { clearSession } from "@/lib/auth/session";
 import { gstinChecksumValid } from "@/lib/validation/gstin";
 
 const MAX_NAME = 255;
+const GSTIN_LENGTH = 15;
 
 export default function BusinessesPage() {
   const router = useRouter();
@@ -40,6 +44,13 @@ export default function BusinessesPage() {
   const [adding, setAdding] = useState(false);
   const [gstinDraft, setGstinDraft] = useState("");
   const [nameDraft, setNameDraft] = useState("");
+
+  // 10.4: live mod-36 feedback — the moment the input holds all 15 characters
+  // and the check digit fails, the inline error renders without a submit. The
+  // submit handler re-checks (server stays authoritative).
+  const gstinLiveInvalid =
+    gstinDraft.trim().length === GSTIN_LENGTH &&
+    !gstinChecksumValid(gstinDraft);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +91,7 @@ export default function BusinessesPage() {
       setAddError("Legal name must be 1–255 characters.");
       return;
     }
-    if (gstin.length !== 15 || !gstinChecksumValid(gstin)) {
+    if (gstin.length !== GSTIN_LENGTH || !gstinChecksumValid(gstin)) {
       setAddError("Invalid GSTIN — format or checksum fails the mod-36 rule.");
       return;
     }
@@ -140,15 +151,31 @@ export default function BusinessesPage() {
                 type="text"
                 inputMode="numeric"
                 placeholder="15-character GSTIN"
-                maxLength={15}
+                maxLength={GSTIN_LENGTH}
                 value={gstinDraft}
                 onChange={(e) => {
                   setGstinDraft(e.target.value);
                   setAddError(null);
                 }}
                 data-testid="business-add-gstin"
-                className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm uppercase dark:border-slate-700 dark:bg-slate-800"
+                aria-invalid={gstinLiveInvalid}
+                aria-describedby={gstinLiveInvalid ? "business-add-gstin-error" : undefined}
+                className={`mt-1 w-56 rounded-md border bg-white px-3 py-2 text-sm uppercase dark:bg-slate-800 ${
+                  gstinLiveInvalid
+                    ? "border-red-500 dark:border-red-500"
+                    : "border-slate-300 dark:border-slate-700"
+                }`}
               />
+              {gstinLiveInvalid && (
+                <p
+                  id="business-add-gstin-error"
+                  role="alert"
+                  data-testid="business-add-live-error"
+                  className="mt-1 w-56 text-xs text-red-600 dark:text-red-400"
+                >
+                  Invalid GSTIN — the mod-36 check digit is wrong.
+                </p>
+              )}
             </div>
             <div className="flex-1 min-w-56">
               <label htmlFor="business-add-name" className="block text-xs font-medium">
@@ -171,7 +198,7 @@ export default function BusinessesPage() {
             <button
               type="button"
               onClick={addBusiness}
-              disabled={adding || nameDraft.trim() === "" || gstinDraft.trim().length !== 15}
+              disabled={adding || nameDraft.trim() === "" || gstinDraft.trim().length !== GSTIN_LENGTH}
               className="mt-5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
               data-testid="business-add-submit"
             >
