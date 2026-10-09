@@ -1,0 +1,36 @@
+=== Phase-8 E2E: 3-lens verification ===
+
+=== Lens 1: Code (backend correctness) ===
+
+$ D:\gst_filing_app\backend\.venv\Scripts\python.exe -m pytest tests/ -q --no-cov -p no:cacheprovider
+........................................................................ [ 29%]
+........................................................................ [ 59%]
+........................................................................ [ 88%]
+...........................                                              [100%]
+
+exit 0 [Lens 1 full pytest]
+
+$ D:\gst_filing_app\backend\.venv\Scripts\python.exe -m ruff check .
+All checks passed!
+
+exit 0 [Lens 1 ruff]
+
+$ D:\gst_filing_app\backend\.venv\Scripts\python.exe -m mypy app/
+Success: no issues found in 66 source files
+
+exit 0 [Lens 1 mypy]
+
+=== Lens 2: Frontend / user flow ===
+
+$ npx tsc --noEmit
+exit 0 [Lens 2 tsc]
+
+$ npm run lint
+
+> frontend@0.1.0 lint
+> eslint
+
+
+exit 0 [Lens 2 eslint]
+
+$ npx playwright test

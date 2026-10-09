@@ -1,0 +1,27 @@
+
+Running 18 tests using 1 worker
+
+(node:17540) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/18] [chromium] › tests\auth-onboarding.spec.ts:53:7 › unified onboarding › register has no role pick and lands on the unified shell
+[2/18] [chromium] › tests\auth-onboarding.spec.ts:74:7 › unified onboarding › login for existing user routes to the unified shell
+[3/18] [chromium] › tests\auth-onboarding.spec.ts:102:7 › unified onboarding › shell lists GST accounts from /auth/me gst_accounts
+[4/18] [chromium] › tests\auth-onboarding.spec.ts:134:7 › route guard › unauthenticated visitor is redirected to login
+[5/18] [chromium] › tests\auth-onboarding.spec.ts:142:7 › route guard › forged gst_session cookie without session is rejected
+[6/18] [chromium] › tests\auth-onboarding.spec.ts:152:7 › route guard › authenticated user hitting /login is sent to the shell
+[7/18] [chromium] › tests\phase4-filing.spec.ts:76:7 › Phase 4 filing surfaces › GSP filing hub renders for a GSTIN + period
+[8/18] [chromium] › tests\phase4-filing.spec.ts:101:7 › Phase 4 filing surfaces › IRN board renders for a GSTIN + period
+[9/18] [chromium] › tests\phase8-businesses.spec.ts:106:7 › manage businesses (/app/businesses) › add a generated GSTIN -> list -> detail -> edit legal_name -> persists
+[10/18] [chromium] › tests\phase8-businesses.spec.ts:177:7 › manage businesses (/app/businesses) › client-side mod-36 checksum rejects a corrupted GSTIN before submit
+[11/18] [chromium] › tests\phase8-dashboard-status-grid.spec.ts:135:7 › dashboard filing-status tracker (/app) › status grid renders filed/draft/pending per period for a seeded GSTIN
+[12/18] [chromium] › tests\phase8-product-shell.spec.ts:101:7 › Phase-8 product shell — nav reachability audit › every Phase-8 screen reachable by clicking nav from /app
+[13/18] [chromium] › tests\phase8-profile.spec.ts:54:7 › profile screen (/app/profile) › nav click opens profile; edit name -> save -> persists after reload; email read-only
+[14/18] [chromium] › tests\phase8-returns-workspace.spec.ts:161:7 › returns workspace (/app/returns/[gstin]/[fp]) › generate -> per-return status -> HSN table -> validation checklist -> Excel downloads
+[15/18] [chromium] › tests\phase8-settings.spec.ts:82:7 › settings screen (/app/settings) › nav click opens settings; toggle pref -> save -> persists after reload
+[16/18] [chromium] › tests\phase8-settings.spec.ts:126:7 › settings screen (/app/settings) › TOTP entry links through to the enrollment flow and reflects enabled state
+[17/18] [chromium] › tests\phase8-settings.spec.ts:159:7 › settings screen (/app/settings) › sign-out-everywhere revokes the other device's session
+[18/18] [chromium] › tests\task7-2-upload-to-output.spec.ts:106:7 › upload-to-output happy path › login → upload → extract → review → confirm → download GSTR-1/3B
+  18 passed (47.4s)
+PW_EXIT=0
