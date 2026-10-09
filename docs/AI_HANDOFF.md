@@ -6,6 +6,84 @@
 
 ---
 
+## 0. Install — fresh clone → running app (do this first)
+
+What exists on this machine (`backend/.venv`, `node_modules`, `.env`) is **gitignored** — a fresh clone has none of it. From zero:
+
+### 0.1 Prerequisites
+
+| Requirement | Why | Check |
+|---|---|---|
+| **Windows** host | Startup scripts, `.exe` binaries, and the `--factory` uvicorn path are Windows-shaped; paths below are Windows-native | — |
+| **Python 3.11** | `requires-python = ">=3.11"`, ruff/mypy pin `py311` | `py -3.11 --version` |
+| **[uv](https://docs.astral.sh/uv/)** (≥0.12) | The venv was created with uv; `backend/uv.lock` is the committed lockfile | `uv --version` |
+| **Node.js ≥ 20** + npm | Next.js 16 frontend (`react 19`, `typescript 5.9`) | `node --version` |
+| **Tesseract OCR** binary | `pytesseract` needs the engine on PATH for scanned/photo uploads | `tesseract --version` |
+| **PostgreSQL 16 / Redis** binaries or **Docker** | The data plane (see 0.4 — bootstrap reuses binaries from the sibling Farmer App install or falls back to Docker) | `docker --version` |
+| **LLM endpoint** (any OpenAI-compatible server) | Invoice extraction calls it at `GST_EXTRACTION_LLM_BASE_URL`; without it, text-layer PDFs still extract, but OCR/photo uploads stall at the LLM step | `curl <base_url>/models` |
+
+### 0.2 Backend venv + deps
+
+```bash
+cd /d/gst_filing_app/backend
+uv sync                        # creates .venv/ from pyproject.toml + uv.lock (exact versions)
+```
+
+> **uv is required** — dev tools live in `[dependency-groups]` (not `optional-dependencies`), so there is no working plain-pip fallback; `uv sync` resolves both the app deps and the dev group. If uv is missing: `pip install uv`.
+
+### 0.3 Environment file — **goes in `backend/.env`**, not the repo root
+
+`app/config.py` loads `env_file=".env"` **relative to the backend cwd** (uvicorn runs from `backend/`). The committed template is at the repo root, the copy must land in `backend/` — a root `.env` is silently ignored. This is the #1 fresh-clone trap:
+
+```bash
+# from backend/:
+cp ../.env.example .env         # template is at the repo root; .env MUST be in backend/
+```
+
+Values needed to boot: `GST_JWT_SECRET`, PG/Redis/MinIO creds (defaults match 0.4), `GST_EXTRACTION_LLM_BASE_URL` + `GST_EXTRACTION_LLM_MODEL`. GSP/IRP keys are sandbox placeholders — filing surfaces work against the sandbox stubs.
+
+### 0.4 Data plane — one command (idempotent)
+
+```bash
+# from repo root, after 0.2:
+backend/.venv/Scripts/python.exe scripts/bootstrap_stack.py          # start + seed + verify
+backend/.venv/Scripts/python.exe scripts/bootstrap_stack.py --check # health check only
+```
+
+Starts PostgreSQL :5436, Redis :6380, MinIO :9001, creates `gst_filing_db` + `core`/`gst`/`extraction` schemas + `gst-docs` bucket. **Binaries are reused from the sibling Farmer App install (`D:/farmer_app/tools`)** if present; otherwise it falls back to `tools/docker-compose.yml` (Docker). Re-running on a running stack is a no-op.
+
+### 0.5 DB migrations (manual — the server does NOT migrate on boot)
+
+```bash
+cd /d/gst_filing_app/backend
+./.venv/Scripts/python.exe -m alembic upgrade head
+```
+
+7 migrations; `create_app()` never calls `alembic` or `create_all` — a missed `upgrade head` means missing tables/columns at runtime.
+
+### 0.6 Run it
+
+```bash
+# Terminal 1 — backend
+cd /d/gst_filing_app/backend
+./.venv/Scripts/python.exe -m uvicorn app.main:create_app --factory --port 8084 --host 127.0.0.1
+
+# Terminal 2 — frontend
+cd /d/gst_filing_app/frontend
+npm install                    # fresh clone only — node_modules is gitignored
+npm run dev -- --port 9094
+```
+
+### 0.7 Verify + seed
+
+```bash
+curl -s http://127.0.0.1:8084/api/v1/health          # {"success":true,...}  (NOT /health — it 404s)
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:9094/login   # 200
+backend/.venv/Scripts/python.exe scripts/seed_demo.py  # demo user + 4 checksum-valid GSTINs (from repo root)
+```
+
+---
+
 ## 1. What this app is
 
 A GST (Goods & Services Tax, India) return-filing platform. A user attaches a GSTIN, uploads purchase/sale invoices (PDF/photo), the app extracts line items, validates them, reconciles ITC, prepares **GSTR-1 / GSTR-3B** returns, and files them via a GSP/IRP adapter.
@@ -19,7 +97,7 @@ A GST (Goods & Services Tax, India) return-filing platform. A user attaches a GS
 
 ---
 
-## 2. Boot the stack (copy-paste)
+## 2. Boot the stack (machine already installed — fresh clone: do §0 first)
 
 ```bash
 # 0. Infra — PostgreSQL:5436, Redis:6380, MinIO:9001 (idempotent; verify with --check)

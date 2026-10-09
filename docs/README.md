@@ -51,3 +51,4 @@
 |---|---|---|
 | 2026-09-26 | All | Initial documentation set created; stack decision finalized as AI-first Python + TypeScript (supersedes v2 Java/Flutter architecture) |
 | 2026-10-09 | TECHNICAL_ARCHITECTURE (v5.0), SECURITY_AND_ACCESS (v1.1), FRONTEND_SPECIFICATION (v1.1), API_SPECIFICATION (v1.1), TESTING_GUIDE, AI_HANDOFF, both READMEs | Phase-8 product completeness folded in: profile/settings/business APIs, shell nav, returns generate + xlsx/HSN/validation, filing-status grid; counts verified at Phase-8 exit (243 tests, 18 E2E specs, 59/59 tasks) |
+| 2026-10-09 | AI_HANDOFF | Added §0 Install (fresh clone → running app): prerequisites table, `uv sync`, the `backend/.env` location trap, bootstrap + manual `alembic upgrade head`, run + verify commands |
