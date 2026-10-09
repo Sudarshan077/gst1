@@ -31,3 +31,6 @@ tools/minio/
 tools/*.exe
 backups/
 backend/.coverage
+
+test-results/
+backend/_quarantine/
