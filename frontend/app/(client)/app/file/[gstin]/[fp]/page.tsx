@@ -21,6 +21,10 @@ import {
   GspFileResult,
   listDocuments,
 } from "@/lib/api/client";
+import { isTerminalStatus } from "@/lib/extraction/status";
+
+/** Re-list interval while any row is non-terminal (Task 9.2: 5s). */
+const QUEUE_REFRESH_MS = 5_000;
 
 function statusColor(status: string) {
   switch (status) {
@@ -49,19 +53,52 @@ export default function FileQueuePage() {
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    /** Re-list the queue; resolves to whether any row is still non-terminal. */
+    async function load(): Promise<boolean> {
+      let hadRows = false;
       try {
         const data = await listDocuments(gstin, fp);
-        if (!cancelled) setRows(data.content);
+        if (!cancelled) {
+          setRows(data.content);
+          hadRows = data.content.length > 0;
+        }
+        return data.content.some(
+          (doc) => !isTerminalStatus(doc.job?.status ?? "UNKNOWN"),
+        );
       } catch (err) {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "failed to load");
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : "failed to load");
+        }
+        // A transient failure while rows are on screen keeps the poller
+        // alive (same policy as the upload poller); a hard first-load
+        // failure stops it.
+        return hadRows;
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
-    void load();
+
+    void load().then((anyNonTerminal) => {
+      if (!cancelled && anyNonTerminal) {
+        // Task 9.2: re-list every 5s while any row is non-terminal; the
+        // interval clears itself once every row reaches a terminal status
+        // and is cleaned up on unmount.
+        timer = setInterval(() => {
+          void load().then((still) => {
+            if (!still && timer !== null) {
+              clearInterval(timer);
+              timer = null;
+            }
+          });
+        }, QUEUE_REFRESH_MS);
+      }
+    });
+
     return () => {
       cancelled = true;
+      if (timer !== null) clearInterval(timer);
     };
   }, [gstin, fp]);
 

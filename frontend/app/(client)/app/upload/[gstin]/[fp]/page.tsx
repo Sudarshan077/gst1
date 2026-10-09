@@ -15,6 +15,12 @@ import {
   uploadDocument,
   UploadResult,
 } from "@/lib/api/client";
+import {
+  isDraftReady,
+  PIPELINE_STAGES,
+  stageState,
+  useExtractionStatusPolling,
+} from "@/lib/extraction/status";
 
 type CaptureSource = "PDF_SCAN" | "DIGITAL" | "PHOTO" | "WHATSAPP";
 
@@ -36,6 +42,12 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
+
+  // Task 9.2: poll the extraction job until a terminal status, cap 5 min.
+  const live = useExtractionStatusPolling(
+    result?.id ?? null,
+    result?.job?.status ?? "UNKNOWN",
+  );
 
   function handleFile(selected: File | null) {
     if (selected) {
@@ -166,17 +178,70 @@ export default function UploadPage() {
           <p className="mt-1 text-xs text-green-700 dark:text-green-300">
             Document ID: {result.id}
           </p>
-          <p className="text-xs text-green-700 dark:text-green-300">
-            Status: {result.job?.status ?? "UNKNOWN"}
+          <p className="text-xs text-green-700 dark:text-green-300" data-testid="upload-status">
+            Status: {live.status}
           </p>
+
+          {/* Live pipeline chips (Task 9.2). Values mirror the backend
+              JobStatus enum — never invented strings. */}
+          <div className="mt-3 flex flex-wrap items-center gap-1" data-testid="pipeline-stages">
+            {PIPELINE_STAGES.map((stage, i) => {
+              const st = stageState(stage, live.status);
+              return (
+                <span key={stage} className="flex items-center gap-1">
+                  <span
+                    className={
+                      st === "done"
+                        ? "rounded-full bg-green-600 px-2 py-0.5 text-[10px] font-semibold text-white"
+                        : st === "active"
+                          ? "rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-semibold text-white"
+                          : "rounded-full bg-slate-300 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                    }
+                    data-testid={`pipeline-stage-${stage}`}
+                  >
+                    {stage}
+                  </span>
+                  {i < PIPELINE_STAGES.length - 1 && (
+                    <span className="text-[10px] text-slate-400">→</span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+
+          {live.polling && (
+            <p className="mt-2 flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
+              <span
+                className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-green-500 border-t-transparent"
+                aria-hidden="true"
+              />
+              <span data-testid="extraction-polling-hint">
+                Extraction in progress… this page refreshes the status every 2s.
+              </span>
+            </p>
+          )}
+          {live.capped && (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300" data-testid="poll-cap-notice">
+              Still processing after 5 minutes — check the documents queue for
+              the latest status.
+            </p>
+          )}
+
           <button
             type="button"
             onClick={() => router.push(`/app/file/${gstin}/${fp}`)}
-            className="mt-3 rounded-md bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800"
+            disabled={!isDraftReady(live.status)}
+            className="mt-3 rounded-md bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="go-to-queue"
           >
             Review / confirm →
           </button>
+          {!isDraftReady(live.status) && (
+            <p className="mt-2 text-xs text-green-800/70 dark:text-green-200/70" data-testid="go-to-queue-hint">
+              Extraction is still running — review unlocks once the draft is
+              ready.
+            </p>
+          )}
         </div>
       )}
     </main>
