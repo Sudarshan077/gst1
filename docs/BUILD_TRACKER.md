@@ -4,7 +4,7 @@
 **Stack:** Python 3.11 (FastAPI · SQLAlchemy · Alembic · PostgreSQL) backend · Next.js 16 + TypeScript (App Router · Tailwind · shadcn/ui) frontend  
 **Build mode:** 3-agent loop — Builder / Tester / Monitor. Every task is independently verified by the Tester (real command output: pytest, ruff, mypy, tsc, Playwright) before the Monitor may ADVANCE it. Backend and frontend are built together in the same loop.  
 **Last updated:** 2026-10-09 00:20 IST  
-**Progress:** **58 / 59 tasks done (98%)**
+**Progress:** **59 / 59 tasks done (100%)**
 
 ---
 
@@ -129,7 +129,7 @@
 | 8.8 | Frontend: Manage businesses (/app/businesses list+add, /app/businesses/[gstin] detail+edit) | ✅ Done | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
 | 8.9 | Frontend: Returns workspace — generate step, JSON/Excel format picker, HSN table, pre-file validation checklist | ✅ Done | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
 | 8.10 | Frontend: Dashboard filing-status tracker (per GSTIN x period roll-up) on /app | ✅ Done | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
-| 8.11 | Phase-8 E2E + full regression (3-lens) + reachability audit | ⬜ Not started | `PHASE8_PRODUCT_COMPLETENESS.md`, `VERIFICATION_SWEEP.md` |
+|| 8.11 | Phase-8 E2E + full regression (3-lens) + reachability audit | ✅ Done | `PHASE8_PRODUCT_COMPLETENESS.md`, `VERIFICATION_SWEEP.md` |
 
 ---
 
