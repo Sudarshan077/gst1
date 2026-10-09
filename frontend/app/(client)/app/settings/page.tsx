@@ -6,26 +6,25 @@
  * (which delegates to the /me/notification-prefs handler — 8.2 contract, no
  * duplicated write logic), TOTP status with an enable/disable entry that
  * links through to /totp, sign-out-everywhere via POST /auth/logout-all, and
- * an account summary from GET /me/settings' session block. The page renders
- * ShellNav so it is reachable by clicking the nav (8.5 gate).
+ * an account summary from GET /me/settings' session block. Phase 10.2: the
+ * header lives in the shared (client)/app layout; this page pushes the user
+ * name + GST accounts into the ShellContext to keep the nav in sync.
  * FRONTEND_SPECIFICATION.md §4: API errors render inline, no silent catches.
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { ShellNav } from "@/components/shared/ShellNav";
+import { useShell } from "@/components/shared/ShellContext";
 import {
   ApiError,
   fetchMe,
   fetchSettings,
-  setAccessToken,
   silentRefresh,
   signOutEverywhere,
   updateSettings,
 } from "@/lib/api/client";
 import type {
-  GstinRefDto,
   NotificationPrefs,
   SettingsDto,
   UserDto,
@@ -58,8 +57,12 @@ function prefsFromSettings(settings: SettingsDto): NotificationPrefs {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const shell = useShell();
+  // Stable state setters (identity never changes) so the mount fetch below
+  // cannot re-fire when the shell value object changes — that would loop.
+  const setShellUserName = shell?.setUserName;
+  const setShellGstAccounts = shell?.setGstAccounts;
   const [user, setUser] = useState<UserDto | null>(null);
-  const [gstAccounts, setGstAccounts] = useState<GstinRefDto[]>([]);
   const [settings, setSettings] = useState<SettingsDto | null>(null);
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [savedPrefs, setSavedPrefs] = useState<NotificationPrefs | null>(null);
@@ -84,7 +87,9 @@ export default function SettingsPage() {
         const loaded = await fetchSettings();
         if (cancelled) return;
         setUser(me.user);
-        setGstAccounts(me.gst_accounts);
+        // 10.2: feed the shared shell header (user chip + GSTIN switcher).
+        setShellUserName?.(me.user.full_name);
+        setShellGstAccounts?.(me.gst_accounts);
         setSettings(loaded);
         const parsed = prefsFromSettings(loaded);
         setPrefs(parsed);
@@ -102,7 +107,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, setShellUserName, setShellGstAccounts]);
 
   async function togglePref(key: keyof NotificationPrefs) {
     if (prefs === null) return;
@@ -148,15 +153,9 @@ export default function SettingsPage() {
     }
   }
 
-  async function signOut() {
-    setAccessToken(null);
-    clearSession();
-    router.push("/login");
-  }
-
   if (settings === null && loadError === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+      <div className="flex min-h-[calc(100vh-3rem)] items-center justify-center text-sm text-slate-500">
         Checking session…
       </div>
     );
@@ -179,15 +178,8 @@ export default function SettingsPage() {
   const activeSessions = settings?.session.active_sessions ?? 0;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <ShellNav
-        roleLabel="GST Filing"
-        userName={user?.full_name ?? "…"}
-        onSignOut={signOut}
-        gstAccounts={gstAccounts}
-      />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
-        <h1 className="text-2xl font-semibold">Settings</h1>
+    <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
+      <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Notification preferences, security, and session management for your account.
         </p>
@@ -208,7 +200,7 @@ export default function SettingsPage() {
             <div>
               <dt className="text-slate-500 dark:text-slate-400">Businesses</dt>
               <dd className="font-medium" data-testid="settings-summary-businesses">
-                {gstAccounts.length}
+                {shell?.gstAccounts.length ?? 0}
               </dd>
             </div>
             <div>
@@ -371,6 +363,5 @@ export default function SettingsPage() {
           )}
         </section>
       </main>
-    </div>
   );
 }

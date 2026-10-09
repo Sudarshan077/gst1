@@ -4,24 +4,24 @@
  * Manage businesses — PHASE8_PRODUCT_COMPLETENESS.md §3.8.8.
  * List + add GSTIN. The add form validates the checksum client-side too
  * with the same mod-36 rule (lib/validation/gstin.ts mirror; server always
- * re-validates). Renders ShellNav so it is reachable by clicking the nav
- * (8.5 gate). FRONTEND_SPECIFICATION.md §4: API errors render inline, no
+ * re-validates). Phase 10.2: the header lives in the shared (client)/app
+ * layout; adding a GSTIN pushes it into the ShellContext so the GSTIN switcher
+ * updates. FRONTEND_SPECIFICATION.md §4: API errors render inline, no
  * silent catches; empty state has a designed next action.
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { ShellNav } from "@/components/shared/ShellNav";
+import { useShell } from "@/components/shared/ShellContext";
 import {
   ApiError,
   addGstAccount,
   fetchMe,
   listGstAccounts,
-  setAccessToken,
   silentRefresh,
 } from "@/lib/api/client";
-import type { GstAccountDto, GstinRefDto } from "@/lib/api/client";
+import type { GstAccountDto } from "@/lib/api/client";
 import { clearSession } from "@/lib/auth/session";
 import { gstinChecksumValid } from "@/lib/validation/gstin";
 
@@ -29,9 +29,12 @@ const MAX_NAME = 255;
 
 export default function BusinessesPage() {
   const router = useRouter();
-  const [userName, setUserName] = useState("…");
+  const shell = useShell();
+  // Stable state setters (identity never changes) so the mount fetch below
+  // cannot re-fire when the shell value object changes — that would loop.
+  const setShellUserName = shell?.setUserName;
+  const setShellGstAccounts = shell?.setGstAccounts;
   const [accounts, setAccounts] = useState<GstAccountDto[] | null>(null);
-  const [gstAccounts, setGstAccounts] = useState<GstinRefDto[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -49,8 +52,9 @@ export default function BusinessesPage() {
         }
         const me = await fetchMe();
         if (cancelled) return;
-        setUserName(me.user.full_name);
-        setGstAccounts(me.gst_accounts);
+        // 10.2: feed the shared shell header (user chip + GSTIN switcher).
+        setShellUserName?.(me.user.full_name);
+        setShellGstAccounts?.(me.gst_accounts);
         const list = await listGstAccounts();
         if (cancelled) return;
         setAccounts(list);
@@ -67,7 +71,7 @@ export default function BusinessesPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, setShellUserName, setShellGstAccounts]);
 
   async function addBusiness() {
     const gstin = gstinDraft.trim().toUpperCase();
@@ -85,7 +89,8 @@ export default function BusinessesPage() {
     try {
       const created = await addGstAccount({ gstin, legal_name: name });
       setAccounts((prev) => [...(prev ?? []), created]);
-      setGstAccounts((prev) => [
+      // 10.2: keep the shell GSTIN switcher in sync with the new account.
+      setShellGstAccounts?.((prev) => [
         ...prev,
         { gstin: created.gstin, role: created.role, legal_name: created.legal_name },
       ]);
@@ -98,15 +103,9 @@ export default function BusinessesPage() {
     }
   }
 
-  async function signOut() {
-    setAccessToken(null);
-    clearSession();
-    router.push("/login");
-  }
-
   if (accounts === null && loadError === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+      <div className="flex min-h-[calc(100vh-3rem)] items-center justify-center text-sm text-slate-500">
         Checking session…
       </div>
     );
@@ -123,14 +122,7 @@ export default function BusinessesPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <ShellNav
-        roleLabel="GST Filing"
-        userName={userName}
-        onSignOut={signOut}
-        gstAccounts={gstAccounts}
-      />
-      <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
+    <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
         <h1 className="text-2xl font-semibold">Businesses</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           GSTINs linked to your account — open one to view and edit its registration details.
@@ -230,7 +222,6 @@ export default function BusinessesPage() {
             </div>
           )}
         </div>
-      </main>
-    </div>
+    </main>
   );
 }

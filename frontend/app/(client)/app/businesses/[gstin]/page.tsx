@@ -7,22 +7,23 @@
  * registered_address, filing_scheme via PATCH /gst-accounts/{gstin} (8.3;
  * requires FILER/ADMIN server-side — the UI shows the fields read-only for
  * VIEWER). GSTIN, PAN, state are registration identities: never editable.
+ * Phase 10.2: the header lives in the shared (client)/app layout; this page
+ * pushes the user name + GST accounts into the ShellContext.
  * FRONTEND_SPECIFICATION.md §4: API errors render inline, no silent catches.
  */
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { ShellNav } from "@/components/shared/ShellNav";
+import { useShell } from "@/components/shared/ShellContext";
 import {
   ApiError,
   fetchMe,
   getGstAccountOverview,
-  setAccessToken,
   silentRefresh,
   updateGstAccount,
 } from "@/lib/api/client";
-import type { GstinRefDto, GstAccountOverviewDto } from "@/lib/api/client";
+import type { GstAccountOverviewDto } from "@/lib/api/client";
 import { clearSession } from "@/lib/auth/session";
 
 const MAX_NAME = 255;
@@ -43,10 +44,13 @@ function fmtDate(iso: string | null): string {
 
 export default function BusinessDetailPage() {
   const router = useRouter();
+  const shell = useShell();
+  // Stable state setters (identity never changes) so the mount fetch below
+  // cannot re-fire when the shell value object changes — that would loop.
+  const setShellUserName = shell?.setUserName;
+  const setShellGstAccounts = shell?.setGstAccounts;
   const params = useParams<{ gstin: string }>();
   const gstin = params.gstin;
-  const [userGstAccounts, setUserGstAccounts] = useState<GstinRefDto[]>([]);
-  const [userName, setUserName] = useState("…");
   const [overview, setOverview] = useState<GstAccountOverviewDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -68,8 +72,9 @@ export default function BusinessDetailPage() {
         }
         const me = await fetchMe();
         if (cancelled) return;
-        setUserName(me.user.full_name);
-        setUserGstAccounts(me.gst_accounts);
+        // 10.2: feed the shared shell header (user chip + GSTIN switcher).
+        setShellUserName?.(me.user.full_name);
+        setShellGstAccounts?.(me.gst_accounts);
         const data = await getGstAccountOverview(gstin);
         if (cancelled) return;
         setOverview(data);
@@ -90,7 +95,7 @@ export default function BusinessDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [gstin, router]);
+  }, [gstin, router, setShellUserName, setShellGstAccounts]);
 
   const detail = overview?.detail ?? null;
   const canEdit = detail !== null && detail.role !== "VIEWER";
@@ -131,15 +136,9 @@ export default function BusinessDetailPage() {
     }
   }
 
-  async function signOut() {
-    setAccessToken(null);
-    clearSession();
-    router.push("/login");
-  }
-
   if (overview === null && loadError === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+      <div className="flex min-h-[calc(100vh-3rem)] items-center justify-center text-sm text-slate-500">
         Checking session…
       </div>
     );
@@ -164,19 +163,12 @@ export default function BusinessDetailPage() {
   const disableSave = saving || !dirty || !canEdit;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <ShellNav
-        roleLabel="GST Filing"
-        userName={userName}
-        onSignOut={signOut}
-        gstAccounts={userGstAccounts}
-      />
-      <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
-        <Link
-          href="/app/businesses"
-          className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400"
-          data-testid="business-back-link"
-        >
+    <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
+      <Link
+        href="/app/businesses"
+        className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+        data-testid="business-back-link"
+      >
           ← All businesses
         </Link>
         <h1 className="mt-2 text-2xl font-semibold" data-testid="business-detail-title">
@@ -365,7 +357,6 @@ export default function BusinessDetailPage() {
             GSTR-1 due dates appear once a period exists.
           </p>
         </div>
-      </main>
-    </div>
+    </main>
   );
 }

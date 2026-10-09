@@ -20,23 +20,23 @@
  * gstr2b/fetch (surfaced from the returns workspace), itc/reconcile and
  * itc/report. Money is integer paise from the API; the rupee conversion
  * happens only at render (FRONTEND_SPECIFICATION.md §4).
+ * Phase 10.2: the header lives in the shared (client)/app layout; this page
+ * pushes the user name + GST accounts into the ShellContext.
  */
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { ShellNav } from "@/components/shared/ShellNav";
+import { useShell } from "@/components/shared/ShellContext";
 import {
   ApiError,
   fetchMe,
   getItcReport,
   ITC_MATCH_STATUSES,
   reconcileItc,
-  setAccessToken,
   silentRefresh,
 } from "@/lib/api/client";
 import type {
-  GstinRefDto,
   ItcMatchStatus,
   ItcReport,
   ItcReportRow,
@@ -98,9 +98,12 @@ export default function ItcPage() {
   const params = useParams<{ gstin: string; fp: string }>();
   const { gstin, fp } = params;
   const router = useRouter();
+  const shell = useShell();
+  // Stable state setters (identity never changes) so the mount fetch below
+  // cannot re-fire when the shell value object changes — that would loop.
+  const setShellUserName = shell?.setUserName;
+  const setShellGstAccounts = shell?.setGstAccounts;
 
-  const [userName, setUserName] = useState("…");
-  const [gstAccounts, setGstAccounts] = useState<GstinRefDto[]>([]);
   const [report, setReport] = useState<ItcReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -126,8 +129,9 @@ export default function ItcPage() {
         }
         const me = await fetchMe();
         if (cancelled) return;
-        setUserName(me.user.full_name);
-        setGstAccounts(me.gst_accounts);
+        // 10.2: feed the shared shell header (user chip + GSTIN switcher).
+        setShellUserName?.(me.user.full_name);
+        setShellGstAccounts?.(me.gst_accounts);
         const data = await getItcReport(gstin, fp);
         if (cancelled) return;
         setReport(data);
@@ -148,7 +152,7 @@ export default function ItcPage() {
     return () => {
       cancelled = true;
     };
-  }, [gstin, fp, router]);
+  }, [gstin, fp, router, setShellUserName, setShellGstAccounts]);
 
   async function handleReconcile() {
     setReconciling(true);
@@ -165,15 +169,9 @@ export default function ItcPage() {
     }
   }
 
-  async function signOut() {
-    setAccessToken(null);
-    clearSession();
-    router.push("/login");
-  }
-
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+      <div className="flex min-h-[calc(100vh-3rem)] items-center justify-center text-sm text-slate-500">
         Checking session…
       </div>
     );
@@ -199,17 +197,10 @@ export default function ItcPage() {
   const chaseRows = rows.filter((r) => r.match_status === "MISSING_IN_2B");
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <ShellNav
-        roleLabel="GST Filing"
-        userName={userName}
-        onSignOut={signOut}
-        gstAccounts={gstAccounts}
-      />
-      <main
-        className="mx-auto w-full max-w-5xl flex-1 px-6 py-8"
-        data-testid="itc-page"
-      >
+    <main
+      className="mx-auto w-full max-w-5xl flex-1 px-6 py-8"
+      data-testid="itc-page"
+    >
         <h1 className="text-2xl font-semibold">ITC reconciliation</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           GSTIN: <span className="font-mono">{gstin}</span> · Period:{" "}
@@ -519,7 +510,6 @@ export default function ItcPage() {
             </ul>
           )}
         </section>
-      </main>
-    </div>
+    </main>
   );
 }
