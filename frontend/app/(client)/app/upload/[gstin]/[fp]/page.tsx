@@ -8,6 +8,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { BatchUploadQueue } from "@/components/upload/BatchUploadQueue";
 import {
   ApiError,
   getDocument,
@@ -244,6 +245,11 @@ export default function UploadPage() {
           )}
         </div>
       )}
+
+      {/* Task 9.2B: local batch queue (multi-file picker/drop, per-file
+          upload → extraction rows). Additive — the single-file card above is
+          unchanged and keeps its testids/contract. */}
+      <BatchUploadQueue gstin={gstin} fp={fp} />
     </main>
   );
 }

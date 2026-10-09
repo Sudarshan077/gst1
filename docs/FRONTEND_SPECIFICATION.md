@@ -60,6 +60,7 @@ Typography: Inter; tables dense (13px), dashboards 14px. Dark mode: shadcn defau
 | Confirmed ledger | Sales/Purchases toggle; sortable table; section chips (B2B/B2CL/B2CS/CDNR/EXP); totals card (taxable, CGST/SGST/IGST, RCM, ITC-books) |
 | Nil month | Nil-return banner + one-click nil GSTR-1 |
 | Filing week | DeadlineCountdown prominent; "X docs unreviewed" blocking warning on return prep |
+| Batch upload | Multi-file picker/drop (≤10 files, 25 MB/file); local queue rows with per-file upload → extraction status (backend JobStatus values), per-row failure + retry; files post sequentially via the single-document API. ZIP expansion out of scope. Additive — the single-file card keeps its `file-input`/`upload-submit` contract |
 
 ### 3.2 Review screen `review/[docId]`
 

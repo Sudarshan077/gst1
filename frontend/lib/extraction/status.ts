@@ -13,7 +13,7 @@
  *
  * No new backend endpoints: the hook polls the existing GET /documents/{id}.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getDocument } from "@/lib/api/client";
 
@@ -90,52 +90,103 @@ export function useExtractionStatusPolling(
   docId: string | null,
   initialStatus: string,
 ): ExtractionPollState {
-  const [state, setState] = useState<ExtractionPollState>({
-    status: initialStatus,
-    polling: false,
-    capped: false,
-  });
+  return (
+    useExtractionStatusPollingMulti(docId === null ? null : [docId], {
+      [docId ?? ""]: initialStatus,
+    }).get(docId ?? "") ?? { status: initialStatus, polling: false, capped: false }
+  );
+}
+
+/**
+ * Batch variant (Task 9.2B): poll up to N documents at the same 2s cadence
+ * with one shared interval and one shared 5-minute cap. Used by the upload
+ * page's local batch queue so every queued row tracks its own job status.
+ *
+ * `initialStatuses` maps docId → status captured at upload time; ids that
+ * are absent or already terminal are not polled. Ids with no live entry
+ * (e.g. a row that never got a doc id because upload failed) resolve to the
+ * caller-supplied fallback. The returned map always has one entry per id.
+ */
+export function useExtractionStatusPollingMulti(
+  docIds: string[] | null,
+  initialStatuses: Record<string, string>,
+): Map<string, ExtractionPollState> {
+  const ids = docIds === null ? [] : [...new Set(docIds)];
+  const [states, setStates] = useState<Record<string, ExtractionPollState>>({});
+
+  // The poller only needs to be rebuilt when the id set changes, not on
+  // every render — keep the latest initial statuses in a ref.
+  const initialRef = useRef<Record<string, string>>(initialStatuses);
+  initialRef.current = initialStatuses;
+  const key = ids.join(",");
 
   useEffect(() => {
-    const terminal = isTerminalStatus(initialStatus);
-    // Re-seed on every docId change (a fresh upload replaces the card).
-    setState({
-      status: initialStatus,
-      polling: docId !== null && !terminal,
-      capped: false,
-    });
-    if (docId === null || terminal) return;
+    const current = key.length > 0 ? key.split(",") : [];
+    const initial = initialRef.current;
+
+    // Re-seed every id (a fresh upload replaces the whole queue).
+    const seeded: Record<string, ExtractionPollState> = {};
+    for (const id of current) {
+      const status = initial[id] ?? "UNKNOWN";
+      seeded[id] = {
+        status,
+        polling: !isTerminalStatus(status),
+        capped: false,
+      };
+    }
+    setStates(seeded);
+
+    const live = current.filter((id) => !isTerminalStatus(seeded[id].status));
+    if (live.length === 0) return;
 
     const startedAt = Date.now();
-    let busy = false;
+    const busy = new Set<string>();
     const timer = setInterval(() => {
-      if (busy) return;
       if (Date.now() - startedAt >= POLL_CAP_MS) {
         clearInterval(timer);
-        setState((s) => ({ ...s, polling: false, capped: true }));
+        setStates((prev) => {
+          const next: Record<string, ExtractionPollState> = { ...prev };
+          for (const id of live) {
+            next[id] = { ...next[id], polling: false, capped: true };
+          }
+          return next;
+        });
         return;
       }
-      busy = true;
-      void (async () => {
-        try {
-          const doc = await getDocument(docId);
-          const status = doc.job?.status ?? "UNKNOWN";
-          if (isTerminalStatus(status)) {
-            clearInterval(timer);
-            setState({ status, polling: false, capped: false });
-          } else {
-            setState((s) => ({ ...s, status }));
+      for (const id of live) {
+        if (busy.has(id)) continue;
+        busy.add(id);
+        void (async () => {
+          try {
+            const doc = await getDocument(id);
+            const status = doc.job?.status ?? "UNKNOWN";
+            const terminal = isTerminalStatus(status);
+            setStates((prev) => {
+              const prevEntry = prev[id];
+              // Stop touching an id once it is settled.
+              if (!prevEntry || (!prevEntry.polling && !prevEntry.capped)) {
+                return prev;
+              }
+              return {
+                ...prev,
+                [id]: { status, polling: !terminal, capped: false },
+              };
+            });
+          } catch {
+            // Transient error: keep the interval running; the cap stops it.
+          } finally {
+            busy.delete(id);
           }
-        } catch {
-          // Transient error: keep the interval running; the cap stops it.
-        } finally {
-          busy = false;
-        }
-      })();
+        })();
+      }
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(timer);
-  }, [docId, initialStatus]);
+  }, [key]);
 
-  return state;
+  const out = new Map<string, ExtractionPollState>();
+  for (const id of ids) {
+    out.set(id, states[id] ?? { status: "UNKNOWN", polling: false, capped: false });
+  }
+  return out;
 }
