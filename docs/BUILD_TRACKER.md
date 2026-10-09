@@ -3,8 +3,8 @@
 **Repo:** `github.com/Sudarshan077/gst1` · **Branch:** `main`  
 **Stack:** Python 3.11 (FastAPI · SQLAlchemy · Alembic · PostgreSQL) backend · Next.js 16 + TypeScript (App Router · Tailwind · shadcn/ui) frontend  
 **Build mode:** 3-agent loop — Builder / Tester / Monitor. Every task is independently verified by the Tester (real command output: pytest, ruff, mypy, tsc, Playwright) before the Monitor may ADVANCE it. Backend and frontend are built together in the same loop.  
-**Last updated:** 2026-10-09 12:17 IST  
-**Progress:** **59 / 59 tasks done (100%)**
+**Last updated:** 2026-10-09 17:13 IST  
+**Progress:** **65 / 66 tasks done (98%)**
 
 ---
 
@@ -21,7 +21,8 @@
 | 6 | Verification Sweep (re-test every prior phase with elite models; Tony, 6 Oct) | 6 | 6 | 0 | ✅ Complete |
 | 7 | UX/Core Flow Redesign (email-only auth, single user, upload-to-output) — Tony, 6 Oct | 3 | 3 | 0 | ✅ Complete |
 | 8 | Product Completeness: Profile, Settings, Business Management & Filing-Ready Returns — Tony, 8 Oct | 11 | 11 | 0 | ✅ Complete |
-| **Total** | | **59** | **59** | **0** | |
+| 9 | QA Sweep Fixes: Review UX, Extraction Feedback, Empty States, Batch Upload & ITC Visibility — Tony, 9 Oct | 7 | 6 | 1 | 🔄 In progress |
+| **Total** | | **66** | **65** | **1** | |
 
 ---
 
@@ -130,6 +131,18 @@
 | 8.9 | Frontend: Returns workspace — generate step, JSON/Excel format picker, HSN table, pre-file validation checklist | ✅ Done | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
 | 8.10 | Frontend: Dashboard filing-status tracker (per GSTIN x period roll-up) on /app | ✅ Done | `PHASE8_PRODUCT_COMPLETENESS.md`, `FRONTEND_SPECIFICATION.md` |
 | 8.11 | Phase-8 E2E + full regression (3-lens) + reachability audit | ✅ Done | `PHASE8_PRODUCT_COMPLETENESS.md`, `VERIFICATION_SWEEP.md` |
+
+### Phase 9 — QA Sweep Fixes: Review UX, Extraction Feedback, Empty States, Batch Upload & ITC Visibility — Tony, 9 Oct
+
+| ID | Task | Status | Source docs |
+|---|---|---|---|
+| 9.1 | Frontend: full-field review editor (all draft fields editable, checksum-validated GSTINs) | ✅ Done | `PHASE9_QA_SWEEP_FIXES.md`, `FRONTEND_SPECIFICATION.md`, `EXTRACTION_SPEC.md` |
+| 9.2 | Frontend: extraction progress polling on upload + queue auto-refresh | ✅ Done | `PHASE9_QA_SWEEP_FIXES.md`, `FRONTEND_SPECIFICATION.md`, `EXTRACTION_SPEC.md` |
+| 9.2B | Frontend: multi-file batch upload queue (<=10 files, per-file status rows) | ✅ Done | `PHASE9_QA_SWEEP_FIXES.md`, `FRONTEND_SPECIFICATION.md`, `API_SPECIFICATION.md` |
+| 9.3 | Frontend: dashboard empty-state CTA (+ Link or Register GSTIN -> /app/businesses) | ✅ Done | `PHASE9_QA_SWEEP_FIXES.md`, `FRONTEND_SPECIFICATION.md` |
+| 9.4 | Frontend: ITC reconciliation dashboard (/app/itc/[gstin]/[fp], books vs 2B, badges, 3B prefill) | ✅ Done | `PHASE9_QA_SWEEP_FIXES.md`, `FRONTEND_SPECIFICATION.md`, `API_SPECIFICATION.md` |
+| 9.5 | Backend: WARN-tier advisory validation rules (stale invoice date, short HSN) | ✅ Done | `PHASE9_QA_SWEEP_FIXES.md`, `EXTRACTION_SPEC.md`, `TESTING_GUIDE.md` |
+| 9.6 | Phase-9 E2E + full regression (3-lens) + reachability audit update | 🔄 In progress | `PHASE9_QA_SWEEP_FIXES.md`, `VERIFICATION_SWEEP.md` |
 
 ---
 
