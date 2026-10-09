@@ -271,10 +271,21 @@ export default function ClientHomePage() {
               </div>
             ))
           ) : (
+            // 9.3: designed empty state (FRONTEND_SPECIFICATION.md §4 — every
+            // list/table has an empty state with a next action). The dashed
+            // box + copy stay; a primary CTA routes to the Phase-8 add-GSTIN
+            // flow at /app/businesses. Additive — no testid removed.
             <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 No GST accounts linked yet — attach a GSTIN to begin.
               </p>
+              <Link
+                href="/app/businesses"
+                className="mt-4 inline-flex rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                data-testid="empty-link-gstin"
+              >
+                + Link or Register GSTIN
+              </Link>
             </div>
           )}
         </div>
