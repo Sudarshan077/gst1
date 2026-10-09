@@ -9,6 +9,7 @@ surrogate id, and PAN is derived from GSTIN positions 3-12 rather than entered.
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Any
 
 from sqlalchemy import select
@@ -411,17 +412,32 @@ def _iso(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+def fy_periods_for_year(fy_start_year: int) -> list[str]:
+    """The 12 `MMYYYY` filing periods of the Indian FY starting in `fy_start_year`.
+
+    Apr..Dec (months 4-12) belong to the start year; the FY rolls over at the
+    calendar year boundary, so Jan..Mar are 01/02/03 of `fy_start_year + 1`.
+    For FY 2026-27 → 042026..122026, 012027, 022027, 032027. Never emits a
+    month index above 12, so every fp satisfies ^(0[1-9]|1[0-2])(20\\d{2})$.
+    """
+    return [f"{m:02d}{fy_start_year}" for m in range(4, 13)] + [
+        f"{m:02d}{fy_start_year + 1}" for m in range(1, 4)
+    ]
+
+
+def current_fy_start_year(today: date | None = None) -> int:
+    """Start year of the Indian FY containing `today` (defaults to today)."""
+    ref = today if today is not None else date.today()
+    return ref.year if ref.month >= 4 else ref.year - 1
+
+
 async def get_this_fy_period_statuses(
     session: AsyncSession, gstin: str
 ) -> list[dict[str, Any]]:
     """Return all 12 periods of the current FY with their status (OPEN if absent)."""
-    from datetime import date
-
     from app.db.models.gst import FilingPeriod
 
-    today = date.today()
-    fy_start_year = today.year if today.month >= 4 else today.year - 1
-    fps = [f"{m:02d}{fy_start_year}" for m in range(4, 16)]
+    fps = fy_periods_for_year(current_fy_start_year())
 
     rows = (
         await session.execute(
@@ -451,10 +467,7 @@ async def get_this_fy_period_statuses(
 
 def current_fy_label() -> str:
     """Return label like '2026-27' for the current Indian FY."""
-    from datetime import date
-
-    today = date.today()
-    start = today.year if today.month >= 4 else today.year - 1
+    start = current_fy_start_year()
     return f"{start}-{str(start + 1)[-2:]}"
 
 
