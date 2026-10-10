@@ -230,7 +230,13 @@ export default function UploadPage() {
 
           <button
             type="button"
-            onClick={() => router.push(`/app/file/${gstin}/${fp}`)}
+            onClick={() => {
+              if (result?.id) {
+                router.push(`/app/review/${gstin}/${fp}/${result.id}`);
+              } else {
+                router.push(`/app/file/${gstin}/${fp}`);
+              }
+            }}
             disabled={!isDraftReady(live.status)}
             className="mt-3 rounded-md bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="go-to-queue"

@@ -29,6 +29,10 @@ export default function LoginPage() {
 
   async function request(e: React.FormEvent) {
     e.preventDefault();
+    if (!identifier.trim()) {
+      setError("Please enter a valid email address");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -75,7 +79,7 @@ export default function LoginPage() {
         </p>
 
         {stage === "identifier" ? (
-          <form onSubmit={request} className="mt-6 space-y-4">
+          <form onSubmit={request} className="mt-6 space-y-4" noValidate>
             <label className="block text-sm font-medium">
               Email
               <input

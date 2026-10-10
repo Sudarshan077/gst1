@@ -18,8 +18,11 @@ import { useEffect, useState } from "react";
 import { useShell } from "@/components/shared/ShellContext";
 import {
   ApiError,
+  dpdpExport,
+  dpdpRequestErasure,
   fetchMe,
   fetchSettings,
+  requestOtp,
   silentRefresh,
   signOutEverywhere,
   updateSettings,
@@ -72,6 +75,13 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [revokedInfo, setRevokedInfo] = useState<string | null>(null);
+  const [dpdpAction, setDpdpAction] = useState<"export" | "erasure" | null>(null);
+  const [dpdpConfirmErase, setDpdpConfirmErase] = useState(false);
+  const [dpdpOtp, setDpdpOtp] = useState("");
+  const [dpdpDevOtp, setDpdpDevOtp] = useState<string | null>(null);
+  const [dpdpError, setDpdpError] = useState<string | null>(null);
+  const [dpdpBusy, setDpdpBusy] = useState(false);
+  const [dpdpStatus, setDpdpStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,6 +161,79 @@ export default function SettingsPage() {
     } catch (err) {
       setSessionError(err instanceof ApiError ? err.message : "failed to revoke sessions");
     }
+  }
+
+  async function startDpdp(action: "export" | "erasure") {
+    setDpdpConfirmErase(false);
+    setDpdpError(null);
+    setDpdpStatus(null);
+    setDpdpOtp("");
+    setDpdpDevOtp(null);
+    if (!user) {
+      setDpdpError("Your account details are still loading — try again.");
+      return;
+    }
+    setDpdpBusy(true);
+    try {
+      // Step-up proof (SECURITY §1): issue a fresh OTP for the authenticated
+      // email, then re-send it back via the X-OTP header on the DPDP call.
+      const res = await requestOtp(user.email, "LOGIN");
+      setDpdpDevOtp(res.dev_otp);
+      setDpdpAction(action);
+    } catch (err) {
+      setDpdpError(err instanceof ApiError ? err.message : "failed to send step-up code");
+    } finally {
+      setDpdpBusy(false);
+    }
+  }
+
+  async function confirmDpdp(e: React.FormEvent) {
+    e.preventDefault();
+    if (dpdpOtp.length !== 6) {
+      setDpdpError("Enter the 6-digit code.");
+      return;
+    }
+    setDpdpBusy(true);
+    setDpdpError(null);
+    try {
+      if (dpdpAction === "export") {
+        const res = await dpdpExport(dpdpOtp);
+        const blob = new Blob([JSON.stringify(res.export, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "dpdp-export.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setDpdpStatus(
+          `Export complete (request ${res.request_id}) — download started.`,
+        );
+      } else {
+        const res = await dpdpRequestErasure(dpdpOtp);
+        setDpdpStatus(
+          `Erasure requested (${res.request_id}) — SLA due ${res.sla_due_date}. Statutory 8-FY retention still applies.`,
+        );
+      }
+      setDpdpAction(null);
+      setDpdpOtp("");
+      setDpdpDevOtp(null);
+    } catch (err) {
+      setDpdpError(err instanceof ApiError ? err.message : "DPDP action failed");
+    } finally {
+      setDpdpBusy(false);
+    }
+  }
+
+  function cancelDpdp() {
+    setDpdpAction(null);
+    setDpdpConfirmErase(false);
+    setDpdpOtp("");
+    setDpdpDevOtp(null);
+    setDpdpError(null);
   }
 
   if (settings === null && loadError === null) {
@@ -359,6 +442,136 @@ export default function SettingsPage() {
               data-testid="settings-session-error"
             >
               {sessionError}
+            </p>
+          )}
+        </section>
+
+        {/* Data Privacy (DPDP) — self-service export + erasure (step-up protected) */}
+        <section
+          className="mt-6 rounded-xl border border-slate-200 p-6 dark:border-slate-800"
+          data-testid="settings-dpdp"
+        >
+          <h2 className="text-base font-semibold">Data Privacy (DPDP)</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Download a machine-readable copy of your data or request erasure.
+            Sensitive actions require re-entering a one-time code.
+          </p>
+
+          {dpdpAction === null && !dpdpConfirmErase && (
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void startDpdp("export")}
+                disabled={dpdpBusy}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                data-testid="dpdp-export-btn"
+              >
+                Export My Data
+              </button>
+              <button
+                type="button"
+                onClick={() => setDpdpConfirmErase(true)}
+                disabled={dpdpBusy}
+                className="rounded-md border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+                data-testid="dpdp-erase-btn"
+              >
+                Request Data Erasure
+              </button>
+            </div>
+          )}
+
+          {dpdpConfirmErase && dpdpAction === null && (
+            <div
+              className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950"
+              data-testid="dpdp-erase-confirm"
+            >
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                Request erasure of your data? This queues a 30-day SLA request;
+                statutory 8-financial-year retention still applies.
+              </p>
+              <div className="mt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => void startDpdp("erasure")}
+                  disabled={dpdpBusy}
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                  data-testid="dpdp-erase-confirm-btn"
+                >
+                  Yes, request erasure
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDpdpConfirmErase(false)}
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {dpdpAction !== null && (
+            <form onSubmit={confirmDpdp} className="mt-4 space-y-3" noValidate>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                {dpdpAction === "export"
+                  ? "Enter the code sent to your email to confirm export."
+                  : "Enter the code sent to your email to confirm erasure."}
+              </p>
+              {dpdpDevOtp !== null && (
+                <p
+                  className="rounded-md bg-amber-50 px-3 py-2 font-mono text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                  data-testid="dpdp-dev-otp"
+                >
+                  dev code: {dpdpDevOtp}
+                </p>
+              )}
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                value={dpdpOtp}
+                onChange={(e) => setDpdpOtp(e.target.value.replace(/\D/g, ""))}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-lg tracking-widest dark:border-slate-700 dark:bg-slate-800"
+                placeholder="6-digit code"
+                data-testid="dpdp-otp"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={dpdpBusy || dpdpOtp.length !== 6}
+                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  data-testid="dpdp-confirm"
+                >
+                  {dpdpBusy ? "Confirming…" : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelDpdp}
+                  disabled={dpdpBusy}
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {dpdpError !== null && (
+            <p
+              className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+              role="alert"
+              data-testid="dpdp-error"
+            >
+              {dpdpError}
+            </p>
+          )}
+          {dpdpStatus !== null && (
+            <p
+              className="mt-3 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950 dark:text-green-300"
+              data-testid="dpdp-status"
+            >
+              {dpdpStatus}
             </p>
           )}
         </section>

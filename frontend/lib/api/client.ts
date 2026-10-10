@@ -679,6 +679,43 @@ export async function signOutEverywhere(): Promise<LogoutAllResult> {
   return apiFetch("/auth/logout-all", { method: "POST" });
 }
 
+/** DPDP self-service export result (POST /me/data/export, step-up protected). */
+export interface DpdpExportResult {
+  request_id: string;
+  status: string;
+  export: Record<string, unknown>;
+}
+
+/** DPDP erasure-request result (POST /me/data/erasure-request). */
+export interface DpdpErasureResult {
+  request_id: string;
+  status: string;
+  retention_carve_out_applied: boolean;
+  sla_days: number;
+  sla_due_date: string;
+}
+
+/**
+ * DPDP export + erasure are step-up protected (SECURITY §1). The caller sends
+ * a fresh 6-digit OTP via the X-OTP header; the backend verifies it against
+ * Redis (same single-use semantics as login) before acting.
+ */
+export async function dpdpExport(otp: string): Promise<DpdpExportResult> {
+  return apiFetch("/me/data/export", {
+    method: "POST",
+    headers: { "X-OTP": otp },
+  });
+}
+
+export async function dpdpRequestErasure(
+  otp: string,
+): Promise<DpdpErasureResult> {
+  return apiFetch("/me/data/erasure-request", {
+    method: "POST",
+    headers: { "X-OTP": otp },
+  });
+}
+
 export async function fetchProfile(): Promise<UserDto> {
   return apiFetch("/me/profile");
 }

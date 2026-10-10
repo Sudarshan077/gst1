@@ -255,10 +255,9 @@ test.describe("9.2 extraction progress polling", () => {
     await expect(page.getByTestId("go-to-queue-hint")).toHaveCount(0);
     await expect(page.getByTestId("extraction-polling-hint")).toHaveCount(0);
 
-    // The gated button navigates to the documents queue.
+    // The gated button navigates directly to the review editor for the doc.
     await goBtn.click();
-    await expect(page).toHaveURL(`/app/file/${gstin}/${fp}`);
-    expect(docId).toBeTruthy();
+    await expect(page).toHaveURL(`/app/review/${gstin}/${fp}/${docId}`);
   });
 
   test("file queue re-lists every 5s while a row is non-terminal", async ({

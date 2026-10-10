@@ -108,7 +108,7 @@ export default function CaHomePage() {
                 </div>
             ) : (
                 filteredAccounts.map(acc => (
-                    <Link key={acc.gstin} href={`/${acc.gstin}`} className="flex items-center justify-between rounded-lg border p-4 hover:border-indigo-400">
+                    <Link key={acc.gstin} href={`/app/businesses/${acc.gstin}`} className="flex items-center justify-between rounded-lg border p-4 hover:border-indigo-400">
                         <div>
                             <div className="font-semibold">{acc.legal_name}</div>
                             <div className="text-sm text-slate-500">{acc.gstin}</div>
