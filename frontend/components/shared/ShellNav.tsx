@@ -88,6 +88,12 @@ export function ShellNav({
       isActive: (p) => p.startsWith("/app/returns"),
     },
     {
+      key: "file",
+      label: "Filing",
+      href: activeGstin !== null ? `/app/file/${activeGstin}/${fp}` : "/app",
+      isActive: (p) => p.startsWith("/app/file"),
+    },
+    {
       key: "itc",
       label: "ITC",
       // Task 9.4: the reconciliation dashboard, GSTIN + period scoped like the

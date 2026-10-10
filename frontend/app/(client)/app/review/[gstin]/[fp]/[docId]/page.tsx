@@ -32,6 +32,15 @@ function paiseText(value: unknown): string {
   return `₹${(n / 100).toFixed(2)}`;
 }
 
+/** Paise → editable rupee string (no ₹ symbol; the field label carries ₹). */
+function rupeeInput(value: unknown): string {
+  const n = typeof value === "number" ? value : 0;
+  return (n / 100).toFixed(2);
+}
+
+/** Client-side validation message for invalid Rupee amounts. */
+const AMOUNT_ERROR = "Please enter a valid amount in Rupees (e.g. 1250.00)";
+
 function FieldRow({
   label,
   value,
@@ -204,14 +213,14 @@ export default function ReviewPage() {
     ) {
       const trimmed = raw.trim();
       if (trimmed === "") return;
-      if (!/^-?\d+$/.test(trimmed)) {
-        setFieldNotes((n) => ({
-          ...n,
-          [key]: "Paise amounts must be whole integer paise (no decimals). Not saved.",
-        }));
+      // Accept ₹1,18,000.00 style input: strip ₹, commas and whitespace, then
+      // require a plain decimal number before converting to integer paise.
+      const cleaned = trimmed.replace(/[₹,\s]/g, "");
+      if (!/^-?\d+(\.\d+)?$/.test(cleaned)) {
+        setFieldNotes((n) => ({ ...n, [key]: AMOUNT_ERROR }));
         return;
       }
-      const next = Number(trimmed); // integer string -> exact int
+      const next = Math.round(parseFloat(cleaned) * 100);
       if (current === next) {
         setFieldNotes((n) => ({ ...n, [key]: "" }));
         return;
@@ -424,7 +433,8 @@ export default function ReviewPage() {
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Every field saves individually on blur (PUT draft). GSTINs are
             checksum-validated client-side before sending; the server
-            re-validates. Paise fields are integer paise.
+            re-validates. Amounts are entered in Rupees and stored as integer
+            paise.
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <EditField
@@ -492,58 +502,58 @@ export default function ReviewPage() {
             </div>
 
             <EditField
-              label="Taxable value (paise)"
+              label="Taxable value (₹)"
               testid="taxable_value_paise"
-              type="number"
-              value={String(fields.taxable_value_paise ?? 0)}
+              type="text"
+              value={rupeeInput(fields.taxable_value_paise)}
               onCommit={(raw) => saveField("taxable_value_paise", raw)}
               hint={fieldNotes.taxable_value_paise}
-              invalid={!!fieldNotes.taxable_value_paise?.startsWith("Paise")}
+              invalid={fieldNotes.taxable_value_paise === AMOUNT_ERROR}
             />
             <EditField
-              label="Total value (paise)"
+              label="Total value (₹)"
               testid="total_value_paise"
-              type="number"
-              value={String(fields.total_value_paise ?? 0)}
+              type="text"
+              value={rupeeInput(fields.total_value_paise)}
               onCommit={(raw) => saveField("total_value_paise", raw)}
               hint={fieldNotes.total_value_paise}
-              invalid={!!fieldNotes.total_value_paise?.startsWith("Paise")}
+              invalid={fieldNotes.total_value_paise === AMOUNT_ERROR}
             />
             <EditField
-              label="CGST (paise)"
+              label="CGST (₹)"
               testid="cgst_paise"
-              type="number"
-              value={String(fields.cgst_paise ?? 0)}
+              type="text"
+              value={rupeeInput(fields.cgst_paise)}
               onCommit={(raw) => saveField("cgst_paise", raw)}
               hint={fieldNotes.cgst_paise}
-              invalid={!!fieldNotes.cgst_paise?.startsWith("Paise")}
+              invalid={fieldNotes.cgst_paise === AMOUNT_ERROR}
             />
             <EditField
-              label="SGST (paise)"
+              label="SGST (₹)"
               testid="sgst_paise"
-              type="number"
-              value={String(fields.sgst_paise ?? 0)}
+              type="text"
+              value={rupeeInput(fields.sgst_paise)}
               onCommit={(raw) => saveField("sgst_paise", raw)}
               hint={fieldNotes.sgst_paise}
-              invalid={!!fieldNotes.sgst_paise?.startsWith("Paise")}
+              invalid={fieldNotes.sgst_paise === AMOUNT_ERROR}
             />
             <EditField
-              label="IGST (paise)"
+              label="IGST (₹)"
               testid="igst_paise"
-              type="number"
-              value={String(fields.igst_paise ?? 0)}
+              type="text"
+              value={rupeeInput(fields.igst_paise)}
               onCommit={(raw) => saveField("igst_paise", raw)}
               hint={fieldNotes.igst_paise}
-              invalid={!!fieldNotes.igst_paise?.startsWith("Paise")}
+              invalid={fieldNotes.igst_paise === AMOUNT_ERROR}
             />
             <EditField
-              label="CESS (paise)"
+              label="CESS (₹)"
               testid="cess_paise"
-              type="number"
-              value={String(fields.cess_paise ?? 0)}
+              type="text"
+              value={rupeeInput(fields.cess_paise)}
               onCommit={(raw) => saveField("cess_paise", raw)}
               hint={fieldNotes.cess_paise}
-              invalid={!!fieldNotes.cess_paise?.startsWith("Paise")}
+              invalid={fieldNotes.cess_paise === AMOUNT_ERROR}
             />
           </div>
         </div>

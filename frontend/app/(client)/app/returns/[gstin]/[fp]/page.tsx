@@ -16,6 +16,7 @@
  * survive untouched (the 7.2 spec depends on them). Money is integer paise
  * from the API; rupee conversion happens only at render (FRONTEND_SPEC §4).
  */
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -486,6 +487,30 @@ export default function ReturnsPage() {
                 : `Download GSTR-3B ${format === "json" ? "JSON" : "Excel"}`}
             </button>
           </div>
+        </div>
+      </section>
+
+      {/* 5. Proceed to file (filing hub) */}
+      <section
+        className="mt-8 rounded-xl border border-indigo-200 bg-indigo-50 p-6 dark:border-indigo-900 dark:bg-indigo-950/40"
+        data-testid="ready-to-file-section"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h3 className="font-semibold text-indigo-950 dark:text-indigo-200">
+              Ready to file?
+            </h3>
+            <p className="mt-1 text-sm text-indigo-800 dark:text-indigo-300">
+              Returns are prepared and pre-filing checks passed. Proceed to the filing hub to submit directly via GSP sandbox.
+            </p>
+          </div>
+          <Link
+            href={`/app/file/${gstin}/${fp}`}
+            className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 whitespace-nowrap"
+            data-testid="proceed-to-file-btn"
+          >
+            Proceed to File →
+          </Link>
         </div>
       </section>
     </main>

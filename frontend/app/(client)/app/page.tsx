@@ -233,12 +233,25 @@ export default function ClientHomePage() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-semibold">{acc.legal_name}</div>
+                  <Link
+                    href={`/app/businesses/${acc.gstin}`}
+                    className="font-semibold text-slate-900 hover:text-indigo-600 hover:underline dark:text-white dark:hover:text-indigo-400"
+                    data-testid="business-title-link"
+                  >
+                    {acc.legal_name}
+                  </Link>
                   <div className="text-sm text-slate-500 dark:text-slate-400">
                     {acc.gstin}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  <Link
+                    href={`/app/businesses/${acc.gstin}`}
+                    className="text-sm font-medium text-slate-600 hover:text-indigo-600 hover:underline dark:text-slate-300 dark:hover:text-indigo-400"
+                    data-testid="manage-business-link"
+                  >
+                    Manage
+                  </Link>
                   <Link
                     href={`/app/upload/${acc.gstin}/${currentFp}`}
                     className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700"
@@ -251,7 +264,7 @@ export default function ClientHomePage() {
                     className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400"
                     data-testid="documents-link"
                   >
-                    Documents
+                    File & Docs
                   </Link>
                   <div className="text-sm text-slate-500 dark:text-slate-400">
                     {acc.role}
