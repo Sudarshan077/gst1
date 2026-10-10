@@ -4,12 +4,14 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.errors import ServiceError
 from app.core.access import GstinAccess, require_gstin_access
 from app.core.auth.dependencies import require_user
-from app.db.models.gst import Invoice
+from app.db.models.gst import Invoice, InvoiceDirection, InvoiceStatus
 from app.db.session import get_session
 from app.services import irp_service
 
@@ -86,4 +88,50 @@ async def get_einvoices(
             }
             for e in einvoices
         ]
+    }
+
+@router.get("/gst-accounts/{gstin}/months/{fp}/invoices")
+async def get_invoices_for_irn(
+    gstin: str,
+    fp: str,
+    access: Annotated[GstinAccess, Depends(require_gstin_access("gstin"))],
+    session: SessionDep,
+) -> dict[str, Any]:
+    """Confirmed outward (SALES) invoices eligible for IRN generation.
+
+    The IRN board lists human-readable invoice_no / date / buyer / total instead
+    of forcing the CA to paste a database Invoice UUID. Each row still carries
+    its Invoice.id so the frontend can POST /invoices/{id}/irn, but the internal
+    key is never shown to the user. Includes IRN state (pending / generated /
+    cancelled) so already-processed invoices are visibly gated.
+    """
+    result = await session.execute(
+        select(Invoice)
+        .options(selectinload(Invoice.e_invoice))
+        .where(Invoice.gstin == access.gstin)
+        .where(Invoice.fp == fp)
+        .where(Invoice.direction == InvoiceDirection.SALES)
+        .where(Invoice.status == InvoiceStatus.CONFIRMED)
+        .order_by(Invoice.invoice_date.desc(), Invoice.invoice_no.asc())
+    )
+    invoices = result.scalars().all()
+    return {
+        "success": True,
+        "data": [
+            {
+                "id": str(inv.id),
+                "invoice_no": inv.invoice_no,
+                "invoice_date": inv.invoice_date.isoformat(),
+                "buyer_gstin": inv.buyer_gstin,
+                "total_value_minor": inv.total_value_minor,
+                "supply_type": inv.supply_type.value,
+                "irn": inv.e_invoice.irn if inv.e_invoice else None,
+                "irn_status": (
+                    "CANCELLED"
+                    if inv.e_invoice and inv.e_invoice.cancelled_at
+                    else ("GENERATED" if inv.e_invoice else "PENDING")
+                ),
+            }
+            for inv in invoices
+        ],
     }

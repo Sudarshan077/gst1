@@ -119,6 +119,6 @@ test.describe("Phase 4 filing surfaces", () => {
     const fp = "092026";
     await page.goto(`/app/einvoice/${gstin}/${fp}`);
     await expect(page.getByText("E-Invoices / IRN")).toBeVisible();
-    await expect(page.getByTestId("generate-irn-btn")).toBeVisible();
+    await expect(page.getByTestId("einvoice-invoices-table")).toBeVisible();
   });
 });

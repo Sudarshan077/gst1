@@ -73,6 +73,18 @@ export function ShellNav({
       href: "/app/businesses",
       isActive: (p) => p === "/app/businesses" || p.startsWith("/app/businesses/"),
     },
+    // CA roster: surfaced only for multi-account users (the /ca route is
+    // otherwise undiscoverable — the CA-firm audit gap). Additive nav item.
+    ...(gstAccounts.length > 1
+      ? [
+          {
+            key: "ca-clients",
+            label: "Clients",
+            href: "/ca",
+            isActive: (p: string) => p === "/ca" || p.startsWith("/ca/"),
+          },
+        ]
+      : []),
     {
       key: "upload",
       label: "Upload",

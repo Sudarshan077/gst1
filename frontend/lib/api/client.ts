@@ -391,6 +391,25 @@ export async function listEinvoices(
   return apiFetch(`/gst-accounts/${gstin}/months/${fp}/einvoices`);
 }
 
+/** Confirmed outward invoice for the IRN board (backend einvoice router). */
+export interface InvoiceDto {
+  id: string;
+  invoice_no: string;
+  invoice_date: string;
+  buyer_gstin: string | null;
+  total_value_minor: number;
+  supply_type: string;
+  irn: string | null;
+  irn_status: "PENDING" | "GENERATED" | "CANCELLED";
+}
+
+export async function listInvoices(
+  gstin: string,
+  fp: string,
+): Promise<InvoiceDto[]> {
+  return apiFetch(`/gst-accounts/${gstin}/months/${fp}/invoices`);
+}
+
 /* ------------------------------------------------------------------ *
  * Task 9.4 — ITC reconciliation dashboard (PHASE9_QA_SWEEP_FIXES §3.9.4).
  * Backend: `app/services/returns/gstr2b.py:build_itc_report`. Money is

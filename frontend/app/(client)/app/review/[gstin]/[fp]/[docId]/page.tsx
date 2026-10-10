@@ -41,19 +41,53 @@ function rupeeInput(value: unknown): string {
 /** Client-side validation message for invalid Rupee amounts. */
 const AMOUNT_ERROR = "Please enter a valid amount in Rupees (e.g. 1250.00)";
 
+/** Plain-English tooltips for SME tax terms (audit gap: SME owners). */
+const POS_HELP = {
+  text: "Place of Supply: 2-digit state code where goods/services were delivered.",
+  testId: "help-pos",
+};
+const RCHRG_HELP = {
+  text: "Reverse charge: the buyer pays tax directly to the government instead of the seller.",
+  testId: "help-rchrg",
+};
+const INTERSTATE_HELP = {
+  text: "Inter-state: deliveries outside your home state attract IGST instead of CGST + SGST.",
+  testId: "help-inter-state",
+};
+
+/** Hover helper icon (?) with a native title tooltip + screen-reader label. */
+function HelpTip({ text, testId }: { text: string; testId: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={text}
+      title={text}
+      data-testid={testId}
+      className="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-slate-200 align-middle text-[10px] font-semibold leading-none text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+    >
+      ?
+    </span>
+  );
+}
+
 function FieldRow({
   label,
   value,
   confidence,
+  help,
 }: {
   label: string;
   value: React.ReactNode;
   confidence?: number;
+  help?: { text: string; testId: string };
 }) {
   const display = value ?? "—";
   return (
     <div className="grid grid-cols-3 gap-2 py-2 text-sm">
-      <span className="text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="text-slate-500 dark:text-slate-400">
+        {label}
+        {help !== undefined && <HelpTip text={help.text} testId={help.testId} />}
+      </span>
       <span className="col-span-2 font-medium">{display}</span>
       {confidence !== undefined && (
         <span className="col-span-3 text-xs">
@@ -80,6 +114,7 @@ function EditField({
   onCommit,
   invalid,
   hint,
+  help,
 }: {
   label: string;
   testid: string;
@@ -88,11 +123,13 @@ function EditField({
   onCommit: (raw: string) => void;
   invalid?: boolean;
   hint?: string;
+  help?: { text: string; testId: string };
 }) {
   return (
     <div>
       <label className="block text-xs" htmlFor={`edit-${testid}`}>
         {label}
+        {help !== undefined && <HelpTip text={help.text} testId={help.testId} />}
       </label>
       <input
         id={`edit-${testid}`}
@@ -383,9 +420,9 @@ export default function ReviewPage() {
             <h2 className="font-semibold">Invoice</h2>
             <FieldRow label="Invoice no" value={String(fields.invoice_no ?? "")} confidence={draft.confidence.invoice_no} />
             <FieldRow label="Date" value={String(fields.invoice_date ?? "")} confidence={draft.confidence.invoice_date} />
-            <FieldRow label="POS" value={String(fields.place_of_supply ?? "")} confidence={draft.confidence.place_of_supply} />
-            <FieldRow label="Inter-state" value={fields.is_inter_state ? "Yes" : "No"} />
-            <FieldRow label="Reverse charge" value={fields.rchrg ? "Yes" : "No"} />
+            <FieldRow label="POS" value={String(fields.place_of_supply ?? "")} confidence={draft.confidence.place_of_supply} help={POS_HELP} />
+            <FieldRow label="Inter-state" value={fields.is_inter_state ? "Yes" : "No"} help={INTERSTATE_HELP} />
+            <FieldRow label="Reverse charge" value={fields.rchrg ? "Yes" : "No"} help={RCHRG_HELP} />
             <FieldRow label="Type" value={String(fields.inv_typ ?? "")} />
           </div>
 
@@ -475,10 +512,14 @@ export default function ReviewPage() {
               type="text"
               value={String(fields.place_of_supply ?? "")}
               onCommit={(raw) => saveField("place_of_supply", raw)}
+              help={POS_HELP}
             />
 
             <div>
-              <span className="block text-xs">Inter-state</span>
+              <span className="block text-xs">
+                Inter-state
+                <HelpTip text={INTERSTATE_HELP.text} testId={`${INTERSTATE_HELP.testId}-edit`} />
+              </span>
               <button
                 type="button"
                 data-testid="edit-is_inter_state"
@@ -490,7 +531,10 @@ export default function ReviewPage() {
             </div>
 
             <div>
-              <span className="block text-xs">Reverse charge (rchrg)</span>
+              <span className="block text-xs">
+                Reverse charge (rchrg)
+                <HelpTip text={RCHRG_HELP.text} testId={`${RCHRG_HELP.testId}-edit`} />
+              </span>
               <button
                 type="button"
                 data-testid="edit-rchrg"

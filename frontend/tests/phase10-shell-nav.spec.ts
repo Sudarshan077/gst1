@@ -142,7 +142,7 @@ test.describe("10.2 shared client shell layout", () => {
 
     // /app/einvoice — the IRN board also gains the shared header.
     await page.goto(`/app/einvoice/${gstin}/${FP}`);
-    await expect(page.getByTestId("generate-irn-btn")).toBeVisible({
+    await expect(page.getByTestId("einvoice-invoices-table")).toBeVisible({
       timeout: 15_000,
     });
     await expectHeaderOnce(page, gstin);
