@@ -171,8 +171,17 @@ export default function ReturnsPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto w-full max-w-4xl px-6 py-8">
-        <p className="text-sm text-slate-500">Loading returns…</p>
+      <main className="mx-auto w-full max-w-4xl px-6 py-8 space-y-6" data-testid="returns-skeleton">
+        <div className="space-y-2">
+          <div className="h-8 w-64 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
+          <div className="h-4 w-48 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800/60" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="h-24 animate-pulse rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+          <div className="h-24 animate-pulse rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+          <div className="h-24 animate-pulse rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+        </div>
+        <div className="h-48 animate-pulse rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
       </main>
     );
   }
@@ -184,6 +193,36 @@ export default function ReturnsPage() {
         GSTIN: <span className="font-mono">{gstin}</span> · Period:{" "}
         <span className="font-mono">{fp}</span>
       </p>
+
+      {/* Guided 5-Step GST Compliance Stepper */}
+      <nav aria-label="Filing progress" className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/50" data-testid="compliance-stepper">
+        <ol className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
+          <li className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-semibold">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">✓</span>
+            <Link href={`/app/upload/${gstin}/${fp}`} className="hover:underline">1. Ingest Invoices</Link>
+          </li>
+          <span className="text-slate-300 dark:text-slate-700">→</span>
+          <li className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-semibold">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">✓</span>
+            <Link href={`/app/file/${gstin}/${fp}`} className="hover:underline">2. Review & Confirm</Link>
+          </li>
+          <span className="text-slate-300 dark:text-slate-700">→</span>
+          <li className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-semibold">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">✓</span>
+            <Link href={`/app/itc/${gstin}/${fp}`} className="hover:underline">3. Reconcile ITC</Link>
+          </li>
+          <span className="text-slate-300 dark:text-slate-700">→</span>
+          <li className="flex items-center gap-1.5 font-bold text-indigo-900 dark:text-indigo-200">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-950 text-[10px] text-indigo-700 dark:text-indigo-300 border border-indigo-400">4</span>
+            <span>4. Prepare Returns</span>
+          </li>
+          <span className="text-slate-300 dark:text-slate-700">→</span>
+          <li className="flex items-center gap-1.5">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-[10px]">5</span>
+            <Link href={`/app/file/${gstin}/${fp}`} className="hover:underline">5. Direct Filing</Link>
+          </li>
+        </ol>
+      </nav>
 
       {error !== null && (
         <div

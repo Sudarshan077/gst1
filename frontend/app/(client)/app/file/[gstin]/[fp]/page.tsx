@@ -166,8 +166,16 @@ export default function FileQueuePage() {
 
   if (loading) {
     return (
-      <main className="mx-auto w-full max-w-4xl px-6 py-8">
-        <p className="text-sm text-slate-500">Loading documents…</p>
+      <main className="mx-auto w-full max-w-4xl px-6 py-8 space-y-6" data-testid="file-skeleton">
+        <div className="flex items-center justify-between">
+          <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
+          <div className="h-9 w-24 animate-pulse rounded-md bg-slate-200 dark:bg-slate-800" />
+        </div>
+        <div className="h-16 animate-pulse rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+        <div className="space-y-3">
+          <div className="h-20 animate-pulse rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+          <div className="h-20 animate-pulse rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+        </div>
       </main>
     );
   }
