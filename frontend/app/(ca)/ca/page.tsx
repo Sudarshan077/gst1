@@ -57,6 +57,29 @@ export default function CaHomePage() {
     );
   }, [gstAccounts, search]);
 
+  function exportRosterCsv() {
+    const headers = ["Legal Name", "Trade Name", "GSTIN", "PAN", "State Code", "Filing Scheme", "IRN Applicable"];
+    const rows = gstAccounts.map(a => [
+      `"${a.legal_name.replace(/"/g, '""')}"`,
+      `"${(a.trade_name || "").replace(/"/g, '""')}"`,
+      a.gstin,
+      a.pan,
+      a.state_code,
+      a.filing_scheme,
+      a.irn_applicable ? "Yes" : "No"
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ca_client_roster_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   async function signOut() {
     setAccessToken(null);
     clearSession();
@@ -88,15 +111,49 @@ export default function CaHomePage() {
         gstAccounts={me?.gst_accounts ?? []}
       />
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
-        <div className="flex items-center justify-between">
+        {/* CA Executive KPI Cards */}
+        <div className="grid gap-4 sm:grid-cols-3 mb-6" data-testid="ca-kpi-cards">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Managed Clients</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white" data-testid="kpi-total-clients">{gstAccounts.length}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Regular Monthly Filers</p>
+            <p className="mt-1 text-2xl font-bold text-indigo-600 dark:text-indigo-400" data-testid="kpi-monthly-filers">
+              {gstAccounts.filter(a => a.filing_scheme.includes("REGULAR")).length}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">E-Invoicing (IRN) Applicable</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-600 dark:text-emerald-400" data-testid="kpi-irn-clients">
+              {gstAccounts.filter(a => a.irn_applicable).length}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
             <h1 className="text-2xl font-semibold">Client roster</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Multi-client compliance management and statutory monitoring</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={exportRosterCsv}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-colors"
+              data-testid="export-roster-csv-btn"
+            >
+              📥 Export Roster (CSV)
+            </button>
             <input 
-                type="text"
-                placeholder="Search by name or GSTIN..."
-                className="rounded-lg border p-2 text-sm"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+              type="text"
+              placeholder="Search by name or GSTIN..."
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="ca-search-input"
             />
+          </div>
         </div>
         
         <div className="mt-8 grid gap-4">

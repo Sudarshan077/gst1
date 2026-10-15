@@ -219,9 +219,32 @@ export default function ClientHomePage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-3 sm:px-6 py-6 sm:py-8 overflow-x-hidden">
+      {/* Statutory Filing Deadlines Countdown Banner */}
+      <div className="mb-6 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/80 via-white to-indigo-50/30 p-4 shadow-xs dark:border-indigo-950 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30" data-testid="statutory-deadlines-banner">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">Statutory Filing Calendar (Sep 2026)</span>
+            </div>
+            <h2 className="mt-1 text-base font-semibold text-slate-900 dark:text-white">Active Filing Period: 092026</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs shadow-xs dark:border-indigo-900 dark:bg-slate-800" data-testid="gstr1-countdown">
+              <span className="text-slate-500 dark:text-slate-400">GSTR-1 Due: </span>
+              <span className="font-bold text-indigo-600 dark:text-indigo-400">11th Oct 2026</span>
+            </div>
+            <div className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs shadow-xs dark:border-indigo-900 dark:bg-slate-800" data-testid="gstr3b-countdown">
+              <span className="text-slate-500 dark:text-slate-400">GSTR-3B Due: </span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">20th Oct 2026</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <h1 className="text-2xl font-semibold">Your GST accounts</h1>
-      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-        Registration month cards and deadlines land with the month workspace.
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        Review filing status, upload monthly invoices, and trigger direct GSP filings.
       </p>
       <div className="mt-8 grid gap-4">
         {me !== null && (me.gst_accounts?.length ?? 0) > 0 ? (

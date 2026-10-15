@@ -57,6 +57,8 @@ export default function FileQueuePage() {
   const [fileResult, setFileResult] = useState<GspFileResult | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [freezeStatus, setFreezeStatus] = useState<PeriodFreezeStatus | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [docSearch, setDocSearch] = useState<string>("");
 
   async function handleFreeze() {
     try {
@@ -263,7 +265,38 @@ export default function FileQueuePage() {
         </div>
       )}
 
-      {rows.length === 0 ? (
+      {/* Document Queue Filter Bar */}
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800" data-testid="doc-filter-bar">
+        <div className="flex items-center gap-1.5">
+          {["ALL", "CONFIRMED", "NEEDS_REVIEW", "FAILED"].map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusFilter(s)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                statusFilter === s
+                  ? "bg-indigo-600 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+              }`}
+              data-testid={`filter-${s.toLowerCase()}`}
+            >
+              {s.replace("_", " ")}
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          placeholder="Filter documents..."
+          value={docSearch}
+          onChange={(e) => setDocSearch(e.target.value)}
+          className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+          data-testid="doc-search-input"
+        />
+      </div>
+
+      {rows.filter(doc => (statusFilter === "ALL" || doc.job?.status === statusFilter) &&
+        (docSearch === "" || doc.doc_type.toLowerCase().includes(docSearch.toLowerCase()) || doc.capture_source.toLowerCase().includes(docSearch.toLowerCase()))
+      ).length === 0 ? (
         <div className="mt-8 rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
           <p className="text-sm text-slate-500 dark:text-slate-400">
             No documents yet.
@@ -277,7 +310,7 @@ export default function FileQueuePage() {
         </div>
       ) : (
         <div className="mt-6 space-y-3">
-          {rows.map((doc) => (
+          {rows.filter(doc => (statusFilter === "ALL" || doc.job?.status === statusFilter) && (docSearch === "" || doc.doc_type.toLowerCase().includes(docSearch.toLowerCase()) || doc.capture_source.toLowerCase().includes(docSearch.toLowerCase()))).map((doc) => (
             <div
               key={doc.id}
               className="flex items-center justify-between rounded-lg border border-slate-200 p-4 dark:border-slate-800"

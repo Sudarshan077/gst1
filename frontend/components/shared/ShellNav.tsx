@@ -185,6 +185,24 @@ export function ShellNav({
         </span>
         <button
           type="button"
+          onClick={() => {
+            const html = document.documentElement;
+            if (html.classList.contains("dark")) {
+              html.classList.remove("dark");
+              try { localStorage.setItem("theme", "light"); } catch {}
+            } else {
+              html.classList.add("dark");
+              try { localStorage.setItem("theme", "dark"); } catch {}
+            }
+          }}
+          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          title="Toggle Dark/Light Mode"
+          data-testid="theme-toggle-btn"
+        >
+          🌓
+        </button>
+        <button
+          type="button"
           onClick={onSignOut}
           className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           data-testid="signout-btn"
