@@ -56,8 +56,13 @@ export function BatchConfirmPanel({ gstin, fp }: { gstin: string; fp: string }) 
       const preview = await batchConfirm(gstin, fp, true);
       setCleanCount(preview.confirmed);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "batch evaluation failed");
-      setCleanCount(null);
+      if (err instanceof ApiError && (err.status === 404 || err.status === 423)) {
+        setCleanCount(0);
+        setError(null);
+      } else {
+        setError(err instanceof ApiError ? err.message : "batch evaluation failed");
+        setCleanCount(null);
+      }
     } finally {
       setEvaluating(false);
     }

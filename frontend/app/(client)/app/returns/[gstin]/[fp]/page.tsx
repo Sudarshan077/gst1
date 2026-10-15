@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   ApiError,
+  silentRefresh,
   downloadReturnXlsx,
   generateReturns,
   getGstr1Export,
@@ -102,6 +103,7 @@ export default function ReturnsPage() {
     let cancelled = false;
     async function load() {
       try {
+        await silentRefresh();
         const [s, r1, r3b, hsnData, validationData, setoffData] =
           await Promise.all([
             getMonthSummary(gstin, fp),

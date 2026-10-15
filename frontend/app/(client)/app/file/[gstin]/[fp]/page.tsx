@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 
 import {
   ApiError,
+  silentRefresh,
   DocumentRow,
   fileGstr1ViaGsp,
   fileGstr3bViaGsp,
@@ -85,6 +86,7 @@ export default function FileQueuePage() {
     async function load(): Promise<boolean> {
       let hadRows = false;
       try {
+        await silentRefresh();
         const data = await listDocuments(gstin, fp);
         if (!cancelled) {
           setRows(data.content);

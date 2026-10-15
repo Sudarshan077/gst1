@@ -59,7 +59,7 @@ from app.db.models.extraction import (
     InvoiceDraft,
     JobStatus,
 )
-from app.db.models.gst import Invoice
+from app.db.models.gst import FilingPeriod, FilingStatus, Invoice
 from app.extraction.models import ExtractedDocument
 from app.extraction.validate import MANDATORY_FIELDS, validate_extraction
 from app.services.review import (
@@ -179,7 +179,33 @@ async def batch_confirm(
     quarantined, quarantine}`. `dry_run=true` evaluates everything and writes
     nothing (the button's enable/disable signal).
     """
-    await _ensure_open_period(session, access.gstin, fp)
+    period = await session.get(FilingPeriod, (access.gstin, fp))
+    if dry_run and period is None:
+        return {
+            "gstin": access.gstin,
+            "fp": fp,
+            "dry_run": True,
+            "confirmed": 0,
+            "total_paise": 0,
+            "confirmed_invoice_ids": [],
+            "quarantined": 0,
+            "quarantine": [],
+        }
+    if period is None:
+        raise ServiceError("filing period not found", 404, "PERIOD_NOT_FOUND")
+    if period.status in (FilingStatus.FILED, FilingStatus.FROZEN):
+        if dry_run:
+            return {
+                "gstin": access.gstin,
+                "fp": fp,
+                "dry_run": True,
+                "confirmed": 0,
+                "total_paise": 0,
+                "confirmed_invoice_ids": [],
+                "quarantined": 0,
+                "quarantine": [],
+            }
+        raise ServiceError("period is locked after filing", 423, "PERIOD_LOCKED")
     account = await session.get(GstAccount, access.gstin)
     if account is None:
         raise ServiceError("GSTIN not found", 404, "GSTIN_NOT_FOUND")
