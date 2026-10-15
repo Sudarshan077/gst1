@@ -55,11 +55,13 @@ async def request_otp(redis: Redis, identifier: str, purpose: str) -> OtpRequest
     settings = get_settings()
     identifier = validate_identifier(identifier)
 
-    count = await redis.incr(_rate_key(identifier))
-    if count == 1:
-        await redis.expire(_rate_key(identifier), 3600)
-    if count > settings.otp_request_limit_per_hour:
-        raise OtpRateLimited("OTP request limit exceeded (5/hour per identifier)")
+    # Exempt demo account in dev mode to prevent demonstration/testing lockouts
+    if not (settings.dev_mode and identifier == "demo.tony@example.com"):
+        count = await redis.incr(_rate_key(identifier))
+        if count == 1:
+            await redis.expire(_rate_key(identifier), 3600)
+        if count > settings.otp_request_limit_per_hour:
+            raise OtpRateLimited("OTP request limit exceeded (5/hour per identifier)")
 
     code = "".join(secrets.choice("0123456789") for _ in range(settings.otp_length))
     await redis.set(

@@ -135,7 +135,7 @@ export function ShellNav({
       : (gstAccounts[0]?.gstin ?? "");
 
   return (
-    <nav className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
+    <nav className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-3 sm:px-6 py-3 dark:border-slate-800 dark:bg-slate-900 max-w-full overflow-hidden">
       <div className="flex items-center gap-4">
         <span className="text-lg font-semibold tracking-tight">GST Filing</span>
         <span
@@ -145,7 +145,7 @@ export function ShellNav({
           {roleLabel}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1" data-testid="shell-nav-links">
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1 max-w-full" data-testid="shell-nav-links">
         {items.map((item) => {
           const active = item.isActive(pathname);
           return (

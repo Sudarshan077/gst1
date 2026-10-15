@@ -184,12 +184,31 @@ export default function ReturnsPage() {
       </p>
 
       {error !== null && (
-        <p
-          className="mt-6 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+        <div
+          className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
           data-testid="returns-error"
         >
-          {error}
-        </p>
+          <h3 className="text-base font-semibold">Filing Period Notice</h3>
+          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+            {error.includes("404") || error.includes("not found") || error.includes("failed to load")
+              ? `Period ${fp} contains no return data yet or has not been initialized.`
+              : error}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link
+              href="/app"
+              className="inline-flex items-center rounded-md bg-indigo-600 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-indigo-500 transition-colors"
+            >
+              ← Return to Dashboard
+            </Link>
+            <Link
+              href={`/app/upload/${gstin}/${fp}`}
+              className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-colors"
+            >
+              Upload Invoices for {fp}
+            </Link>
+          </div>
+        </div>
       )}
 
       {actionError !== null && (

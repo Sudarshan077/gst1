@@ -218,7 +218,7 @@ export default function ClientHomePage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
+    <main className="mx-auto w-full max-w-5xl flex-1 px-3 sm:px-6 py-6 sm:py-8 overflow-x-hidden">
       <h1 className="text-2xl font-semibold">Your GST accounts</h1>
       <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
         Registration month cards and deadlines land with the month workspace.
@@ -231,7 +231,7 @@ export default function ClientHomePage() {
               className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"
               data-testid="gst-account-card"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <Link
                     href={`/app/businesses/${acc.gstin}`}
@@ -244,7 +244,7 @@ export default function ClientHomePage() {
                     {acc.gstin}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   <Link
                     href={`/app/businesses/${acc.gstin}`}
                     className="text-sm font-medium text-slate-600 hover:text-indigo-600 hover:underline dark:text-slate-300 dark:hover:text-indigo-400"
