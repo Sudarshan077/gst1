@@ -63,7 +63,6 @@ from app.db.models.gst import FilingPeriod, FilingStatus, Invoice
 from app.extraction.models import ExtractedDocument
 from app.extraction.validate import MANDATORY_FIELDS, validate_extraction
 from app.services.review import (
-    _ensure_open_period,
     _persist_invoice,
     _run_validation,
 )
