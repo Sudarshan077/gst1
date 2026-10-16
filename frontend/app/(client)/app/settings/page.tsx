@@ -295,6 +295,41 @@ export default function SettingsPage() {
           </dl>
         </section>
 
+        {/* Appearance Section — Linear / Vercel Minimalist */}
+        <section
+          className="mt-6 rounded-xl border border-zinc-200/80 bg-white p-6 dark:border-white/[0.08] dark:bg-[#121215] transition-colors"
+          data-testid="settings-appearance"
+        >
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Appearance</h2>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Choose your preferred workspace aesthetic. Engineered with refined obsidian and zinc tones.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                document.documentElement.classList.remove("dark");
+                try { localStorage.setItem("theme", "light"); } catch {}
+                window.dispatchEvent(new Event("themechange"));
+              }}
+              className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-zinc-300 dark:hover:bg-white/[0.08] transition-all"
+            >
+              <span>☀️</span> Light Mode
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                document.documentElement.classList.add("dark");
+                try { localStorage.setItem("theme", "dark"); } catch {}
+                window.dispatchEvent(new Event("themechange"));
+              }}
+              className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-white/[0.12] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12] transition-all"
+            >
+              <span>🌙</span> Dark Mode (Linear / Obsidian)
+            </button>
+          </div>
+        </section>
+
         {/* Notification preferences (done_when gate: toggle -> save -> persists) */}
         <section
           className="mt-6 rounded-xl border border-slate-200 p-6 dark:border-slate-800"

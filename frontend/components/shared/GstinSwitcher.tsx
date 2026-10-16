@@ -1,13 +1,8 @@
 "use client";
 
 /**
- * Searchable GSTIN switcher for the shell header (replaces the native
- * <select>). Native selects cannot host a search bar, so this renders a
- * compact trigger button showing the active GSTIN and, when opened, a
- * panel with a search input plus a filtered, keyboard-navigable list of
- * GSTINs (GSTIN + legal name). Behaviour is otherwise unchanged: picking a
- * GSTIN fires onSelect and the shell navigates to the same section scoped
- * to that GSTIN.
+ * Searchable GSTIN switcher for the shell header.
+ * Linear / Vercel Minimalist styling.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -24,7 +19,7 @@ function ChevronDown() {
   return (
     <svg
       aria-hidden="true"
-      className="h-3.5 w-3.5 shrink-0 text-slate-400"
+      className="h-3.5 w-3.5 shrink-0 text-zinc-400 dark:text-zinc-500"
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
@@ -53,12 +48,12 @@ export function GstinSwitcher({ accounts, value, onSelect }: GstinSwitcherProps)
     );
   }, [accounts, query]);
 
-  // Reset the highlighted row whenever the query (and thus the list) changes.
+  // Reset the highlighted row whenever the query changes.
   useEffect(() => {
     setHighlight(0);
   }, [query]);
 
-  // Close on outside pointer-down; reset the query so the next open is clean.
+  // Close on outside pointer-down.
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: MouseEvent) => {
@@ -71,7 +66,7 @@ export function GstinSwitcher({ accounts, value, onSelect }: GstinSwitcherProps)
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open]);
 
-  // Focus the search input once the panel is mounted.
+  // Focus the search input once opened.
   useEffect(() => {
     if (!open) return;
     setQuery("");
@@ -114,15 +109,15 @@ export function GstinSwitcher({ accounts, value, onSelect }: GstinSwitcherProps)
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex max-w-52 items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+        className="flex max-w-52 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/[0.1] dark:bg-[#121215] dark:text-zinc-200 dark:hover:bg-white/[0.04] transition-colors"
       >
         <span className="truncate font-mono">{value || "Select GSTIN"}</span>
         <ChevronDown />
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-full z-50 mt-1 w-80 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          <div className="border-b border-slate-200 p-2 dark:border-slate-700">
+        <div className="absolute right-0 top-full z-50 mt-1.5 w-80 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-white/[0.12] dark:bg-[#141418] dark:shadow-2xl dark:shadow-black/80 backdrop-blur-md">
+          <div className="border-b border-zinc-100 p-2.5 dark:border-white/[0.08]">
             <input
               ref={searchRef}
               type="text"
@@ -132,7 +127,7 @@ export function GstinSwitcher({ accounts, value, onSelect }: GstinSwitcherProps)
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500"
+              className="w-full rounded-lg border border-zinc-200 bg-zinc-50/60 px-2.5 py-1.5 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-zinc-400/20 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-white/[0.25]"
             />
           </div>
           <ul
@@ -142,7 +137,7 @@ export function GstinSwitcher({ accounts, value, onSelect }: GstinSwitcherProps)
             className="max-h-64 overflow-auto py-1"
           >
             {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
+              <li className="px-3.5 py-2.5 text-sm text-zinc-500 dark:text-zinc-400">
                 No GSTIN matches
               </li>
             ) : (
@@ -158,23 +153,24 @@ export function GstinSwitcher({ accounts, value, onSelect }: GstinSwitcherProps)
                     data-testid={`gstin-option-${a.gstin}`}
                     onMouseEnter={() => setHighlight(i)}
                     onClick={() => commit(a.gstin)}
-                    className={`cursor-pointer px-3 py-1.5 ${
+                    className={`cursor-pointer px-3.5 py-2 transition-colors ${
                       highlighted
-                        ? "bg-indigo-50 dark:bg-indigo-950"
+                        ? "bg-zinc-100/80 dark:bg-white/[0.06]"
                         : "bg-transparent"
                     }`}
                   >
-                    <div
-                      className={`truncate font-mono text-sm ${
-                        selected
-                          ? "font-semibold text-indigo-700 dark:text-indigo-300"
-                          : "text-slate-700 dark:text-slate-200"
-                      }`}
-                    >
-                      {a.gstin}
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        {a.gstin}
+                      </span>
+                      {selected ? (
+                        <span className="rounded border border-zinc-200/60 bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium text-zinc-700 dark:border-white/[0.1] dark:bg-white/[0.08] dark:text-zinc-300">
+                          Active
+                        </span>
+                      ) : null}
                     </div>
                     {a.legal_name ? (
-                      <div className="truncate text-xs text-slate-500 dark:text-slate-400">
+                      <div className="truncate text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                         {a.legal_name}
                       </div>
                     ) : null}

@@ -1,13 +1,26 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
- * Design tokens — FRONTEND_SPECIFICATION.md §2. Dark mode: shadcn default
- * tokens only, no custom theme forks. Accent indigo-600.
+ * Linear / Vercel Minimalist Design System (Obsidian & Refined Zinc)
  */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --accent: #4f46e5; /* indigo-600 */
+  --background: #fbfbfc;
+  --foreground: #09090b;
+  --card-bg: #ffffff;
+  --card-border: #e4e4e7;
+  --accent: #4f46e5;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --card-bg: #121215;
+  --card-border: rgba(255, 255, 255, 0.08);
+  --accent: #6366f1;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -18,15 +31,104 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  min-height: 100vh;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Sophisticated Linear/Vercel palette mappings for dark mode */
+.dark body {
+  background-color: #09090b !important;
+  color: #f4f4f5;
+}
+
+/* Elevate main cards and containers */
+.dark .bg-white {
+  background-color: #121215 !important;
+}
+
+.dark .dark\:bg-slate-900 {
+  background-color: #121215 !important;
+}
+
+.dark .dark\:bg-slate-950 {
+  background-color: #09090b !important;
+}
+
+/* Replace gaudy neon purple glows with restrained obsidian/zinc surfaces */
+.dark .dark\:bg-indigo-950 {
+  background-color: rgba(255, 255, 255, 0.07) !important;
+  color: #f4f4f5 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .dark\:text-indigo-300,
+.dark .dark\:text-indigo-400 {
+  color: #e4e4e7 !important;
+}
+
+/* Hairline borders - signature Linear/Vercel style */
+.dark .border-slate-200,
+.dark .dark\:border-slate-800 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark .border-slate-300,
+.dark .dark\:border-slate-700 {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.dark .dark\:border-slate-600 {
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+/* Balanced typographic hierarchy */
+.dark .text-slate-900 {
+  color: #f4f4f5 !important;
+}
+
+.dark .dark\:text-slate-100 {
+  color: #f4f4f5 !important;
+}
+
+.dark .dark\:text-slate-200 {
+  color: #e4e4e7 !important;
+}
+
+.dark .dark\:text-slate-300 {
+  color: #d4d4d8 !important;
+}
+
+.dark .dark\:text-slate-400 {
+  color: #a1a1aa !important;
+}
+
+.dark .dark\:text-slate-500 {
+  color: #71717a !important;
+}
+
+/* Clean interactive states */
+.dark .dark\:hover\:bg-slate-800:hover,
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Clean inputs in dark mode */
+.dark input[type="text"],
+.dark input[type="password"],
+.dark input[type="email"],
+.dark select {
+  background-color: #16161a;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f4f4f5;
+}
+
+.dark input:focus,
+.dark select:focus {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  outline: none;
 }
