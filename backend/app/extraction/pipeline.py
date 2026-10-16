@@ -107,11 +107,18 @@ async def run_pipeline(
         raw["capture_source"] = source
         document = client.parse_document(raw)
     except LLMExtractionError as exc:
-        return ExtractionResult(
-            ocr_text=ocr_text,
-            llm_model=client.model,
-            error=f"LLM extraction failed: {exc}",
-        )
+        # Fallback: rule-based invoice extraction when external LLM service is offline
+        from app.extraction.heuristic import extract_from_text_heuristic
+        fallback_doc = extract_from_text_heuristic(ocr_text, doc_id=doc_id, source=source)
+        if fallback_doc is not None:
+            document = fallback_doc
+            raw = {"_llm_meta": {"model": "heuristic-fallback", "tokens_in": 0, "tokens_out": 0}}
+        else:
+            return ExtractionResult(
+                ocr_text=ocr_text,
+                llm_model=client.model,
+                error=f"LLM extraction failed: {exc}",
+            )
 
     # 4. Validate
     validation = validate_extraction(
